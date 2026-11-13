@@ -302,6 +302,33 @@ def test_overloaded_model_is_skipped_next_time():
         llm._bad_until.clear(); llm._last_ok.clear()
 
 
+def test_thinking_is_kept_short():
+    """Gemini 3 계열은 생각을 low로 줄여 빠르게 답하고, 설정을 거부하면 설정 없이 다시 시도한다."""
+    from fastapi import HTTPException
+
+    assert llm._gen_config("gemini-3.8-flash") == {"thinkingConfig": {"thinkingLevel": "low"}}
+    assert llm._gen_config("gemini-2.5-flash") == {"thinkingConfig": {"thinkingBudget": 0}}
+    assert "thinkingConfig" not in llm._gen_config("gemini-1.5-flash")
+    saved = (llm._send, llm.chat_model)
+    llm.chat_model = lambda: ["gemini-3.8-flash"]
+    llm._bad_until.clear(); llm._last_ok.clear()
+    seen = []
+
+    def fake_send(method, path, json=None, timeout=40):
+        seen.append(json["generationConfig"])
+        if json["generationConfig"]:
+            raise HTTPException(502, "Gemini 오류 400: thinking level not supported")
+        return {"candidates": [{"content": {"parts": [{"text": "OK"}]}}]}
+
+    llm._send = fake_send
+    try:
+        assert REAL_COMPLETE("s", "u") == "OK"
+        assert seen == [{"thinkingConfig": {"thinkingLevel": "low"}}, {}]
+    finally:
+        llm._send, llm.chat_model = saved
+        llm._bad_until.clear(); llm._last_ok.clear()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

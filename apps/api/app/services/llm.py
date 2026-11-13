@@ -128,11 +128,21 @@ def embed(texts: list[str]) -> list[list[float]]:
     return out
 
 
+def _gen_config(model: str, fast: bool = True) -> dict:
+    """새 Gemini(3 계열)는 기본이 '깊이 생각하기'라 간단한 질문도 30~40초 걸린다 → 생각을 최소로 줄인다."""
+    if not fast:
+        return {}
+    if re.search(r"gemini-3", model):
+        return {"thinkingConfig": {"thinkingLevel": "low"}}  # 3.8은 minimal 불가, low부터 가능
+    if re.search(r"gemini-2\.5", model):
+        return {"thinkingConfig": {"thinkingBudget": 0}}
+    return {"temperature": 0.2}
+
+
 def complete(system: str, user: str) -> str:
     body = {
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": user}]}],
-        "generationConfig": {"temperature": 0.2},
     }
     last: HTTPException | None = None
     deadline = time.monotonic() + 48  # Vercel 함수 제한(60초) 안에서 끝내기
@@ -145,7 +155,15 @@ def complete(system: str, user: str) -> str:
         if left < 8:
             break
         try:
-            data = _send("POST", f"models/{model}:generateContent", body, timeout=min(25, left))
+            try:
+                data = _send("POST", f"models/{model}:generateContent",
+                             {**body, "generationConfig": _gen_config(model)}, timeout=min(25, left))
+            except HTTPException as e:
+                if e.status_code != 502 or "thinking" not in str(e.detail).lower():
+                    raise
+                # 이 모델이 생각 설정을 거부하면 설정 없이 한 번 더
+                data = _send("POST", f"models/{model}:generateContent",
+                             {**body, "generationConfig": _gen_config(model, False)}, timeout=min(25, max(left - 1, 8)))
         except HTTPException as e:
             if e.status_code == 429:
                 raise
