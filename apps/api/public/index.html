@@ -11,51 +11,68 @@
   body { margin:0; font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; background:var(--bg); color:var(--text); }
   a { color:var(--main); word-break:break-all; }
   mark { background:#fff3a3; border-radius:3px; padding:0 1px; }
+  button { font-family:inherit; }
 
-  /* ── 전체 틀: PC는 3단(그룹 | 채팅 | 자료), 폰은 탭으로 한 화면씩 ── */
   .app { height:100vh; height:100dvh; display:flex; flex-direction:column; }
-  .panes { flex:1; min-height:0; display:grid; grid-template-columns:240px minmax(0,1fr) 380px; }
-  .pane { overflow-y:auto; padding:14px; min-height:0; }
-  #side { background:var(--card); border-right:1px solid var(--line); }
-  #docs { border-left:1px solid var(--line); }
-  #chat { display:flex; flex-direction:column; padding:0; background:var(--bg); }
-  #tabs { display:none; background:var(--card); border-top:1px solid var(--line); padding:6px; gap:4px; }
-  #tabs button { flex:1; border:0; background:none; padding:12px 4px; border-radius:8px; font-size:15px; cursor:pointer; color:var(--text); }
-  #tabs button.on { background:#e8eefc; color:var(--main); font-weight:600; }
+  #top { display:flex; align-items:center; gap:6px; padding:8px 12px; background:var(--card); border-bottom:1px solid var(--line); }
+  .brand { font-weight:700; font-size:16px; margin-right:6px; white-space:nowrap; }
+  .topnav { display:flex; gap:4px; flex:1; }
+  .topnav button { border:0; background:none; padding:9px 14px; border-radius:8px; font-size:15px; cursor:pointer; color:var(--text); white-space:nowrap; }
+  .topnav button.on { background:#e8eefc; color:var(--main); font-weight:600; }
+  #main { flex:1; min-height:0; }
+  .view { display:none; height:100%; } .view.on { display:block; }
 
-  .brand { font-size:16px; font-weight:700; margin:2px 2px 12px; }
+  /* 목록 | 상세 : PC는 두 칸, 폰은 목록 → 누르면 상세(← 뒤로) */
+  .split { display:grid; grid-template-columns:320px minmax(0,1fr); height:100%; }
+  .listpane { overflow-y:auto; padding:12px; background:var(--card); border-right:1px solid var(--line); min-height:0; }
+  .detail { min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+  .back { display:none; }
+  .empty { flex:1; display:flex; align-items:center; justify-content:center; color:var(--sub); font-size:14px; padding:20px; text-align:center; }
+
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
   .btn { background:var(--main); color:#fff; border:0; border-radius:8px; padding:10px 16px; font-size:15px; cursor:pointer; }
   .btn:disabled { opacity:.5; }
-  .ghost { background:none; border:1px solid var(--line); color:var(--sub); border-radius:8px; padding:6px 10px; cursor:pointer; }
+  .ghost { background:none; border:1px solid var(--line); color:var(--sub); border-radius:8px; padding:6px 10px; cursor:pointer; font-size:14px; }
   .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .sub { color:var(--sub); font-size:13px; }
   h2 { font-size:16px; margin:0 0 10px; }
   input[type=text], input[type=password], input[type=search], textarea { width:100%; padding:11px; border:1px solid var(--line); border-radius:10px; font-size:16px; font-family:inherit; }
   .err { color:#c0392b; } .ok { color:#1e8e3e; }
 
-  /* 그룹 목록 */
-  .ghead { display:flex; justify-content:space-between; align-items:center; margin:14px 2px 6px; font-size:13px; color:var(--sub); }
-  .g { padding:10px 12px; border-radius:8px; cursor:pointer; font-size:15px; border:1px solid transparent; margin-bottom:2px; }
+  /* 목록 항목 */
+  .ghead { margin:14px 4px 6px; font-size:12px; color:var(--sub); font-weight:600; }
+  .g { padding:10px 12px; border-radius:10px; cursor:pointer; font-size:15px; border:1px solid transparent; margin-bottom:2px; }
   .g:hover { background:#f1f3f6; }
-  .g.on { background:#e8eefc; color:var(--main); font-weight:600; }
-  .g .sub { display:block; font-weight:400; margin-top:2px; }
+  .g.on { background:#e8eefc; color:var(--main); }
+  .g .t { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .g .sub { display:block; margin-top:2px; font-weight:400; color:var(--sub); }
+  .badge { display:inline-block; font-size:11px; background:#eef1f5; color:#44506a; border-radius:999px; padding:1px 8px; margin-right:6px; font-weight:500; }
+  .badge.faq { background:#fdeecf; } .badge.guide { background:#e3f4e1; } .badge.keypoints { background:#e8e4fb; } .badge.answer { background:#ffe3e3; } .badge.summary { background:#dbeafe; }
 
-  /* 채팅 */
-  .chead { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); }
-  .chead b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* 대화 */
+  .chead { display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--card); border-bottom:1px solid var(--line); }
+  .chead b { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chead .acts { display:flex; gap:6px; }
+  .subtabs { display:none; background:var(--card); border-bottom:1px solid var(--line); padding:6px; gap:4px; }
+  .subtabs button { flex:1; border:0; background:none; padding:9px 4px; border-radius:8px; font-size:15px; cursor:pointer; }
+  .subtabs button.on { background:#e8eefc; color:var(--main); font-weight:600; }
+  .cbody { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 350px; }
+  #chatCol { display:flex; flex-direction:column; min-height:0; background:var(--bg); }
+  #docCol { overflow-y:auto; padding:12px; border-left:1px solid var(--line); min-height:0; }
   #log { flex:1; overflow-y:auto; padding:14px 16px; }
   .msg { white-space:pre-wrap; line-height:1.55; }
   .q { background:#e8eefc; border-radius:12px; padding:10px 12px; margin:10px 0 10px auto; max-width:85%; width:fit-content; white-space:pre-wrap; }
   .chip { display:inline-block; font-size:12px; border:1px solid var(--line); border-radius:999px; padding:2px 10px; margin:6px 6px 0 0; cursor:pointer; color:var(--main); background:#fff; }
   .snip { font-size:13px; color:var(--sub); border-left:3px solid var(--line); padding-left:8px; margin-top:6px; display:none; }
-  .ask { display:flex; gap:8px; background:var(--card); border-top:1px solid var(--line); padding:10px 16px; }
+  .mact { margin-top:8px; }
+  .sm { padding:3px 9px; font-size:12px; }
+  .ask { display:flex; gap:8px; background:var(--card); border-top:1px solid var(--line); padding:10px 14px; }
   .ask input { flex:1; }
   .flash { animation: flash 2.2s ease-out; }
   @keyframes flash { 0% { box-shadow:0 0 0 3px #ffd84d; } 100% { box-shadow:0 0 0 3px transparent; } }
 
   /* 자료 올리기 */
-  #drop { display:block; border:2px dashed var(--line); border-radius:12px; padding:22px 12px; text-align:center; cursor:pointer; background:#fafbfc; }
+  #drop { display:block; border:2px dashed var(--line); border-radius:12px; padding:20px 12px; text-align:center; cursor:pointer; background:#fafbfc; }
   #drop.over { border-color:var(--main); background:#e8eefc; }
   .qi { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); font-size:14px; }
   .qi .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
@@ -63,7 +80,13 @@
   .qi .st.err { color:#c0392b; } .qi .st.ok { color:#1e8e3e; }
   #status, #diag { font-size:13px; margin:8px 0; white-space:pre-wrap; }
 
-  /* 팝업들 */
+  /* 산출물 보기 */
+  .ohead { padding:12px 14px; background:var(--card); border-bottom:1px solid var(--line); }
+  .otools { display:flex; flex-wrap:wrap; gap:6px; padding:8px 14px; background:var(--card); border-bottom:1px solid var(--line); }
+  .otext { flex:1; overflow-y:auto; padding:16px; white-space:pre-wrap; line-height:1.65; font-size:15px; }
+  #contbox { display:none; padding:10px 14px; background:#fffbe8; border-top:1px solid var(--line); }
+
+  /* 팝업 / 알림 */
   .modal { position:fixed; inset:0; background:rgba(20,24,35,.55); display:none; align-items:center; justify-content:center; z-index:40; padding:20px; }
   .modal .box { background:#fff; border-radius:14px; padding:20px; width:100%; max-width:420px; max-height:88vh; overflow-y:auto; }
   #srch .box { max-width:640px; }
@@ -72,15 +95,26 @@
   .hit:hover { background:#f6f8fc; }
   .hit .t { font-weight:600; }
   .hit .s { color:var(--sub); font-size:13px; }
+  .genbtn { display:block; width:100%; text-align:left; margin-top:8px; padding:12px; background:#f6f8fc; border:1px solid var(--line); border-radius:10px; cursor:pointer; font-size:15px; }
+  .genbtn:disabled { opacity:.5; }
+  .genbtn .sub { display:block; margin-top:2px; }
+  #toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); background:#1c2230; color:#fff; padding:11px 16px; border-radius:12px; font-size:14px; z-index:80; display:none; align-items:center; gap:12px; max-width:92vw; }
+  #toast button { background:#fff; color:#1c2230; border:0; border-radius:8px; padding:5px 10px; cursor:pointer; font-size:13px; }
 
   @media (max-width: 900px) {
-    .panes { display:block; position:relative; }
-    .pane { position:absolute; inset:0; display:none; }
-    .pane.on { display:block; }
-    #chat { display:none; }
-    #chat.on { display:flex; }
-    #tabs { display:flex; }
-    #side { border-right:0; } #docs { border-left:0; }
+    .split { display:block; position:relative; }
+    .listpane { height:100%; border-right:0; }
+    .split .detail { display:none; height:100%; }
+    .split.open .listpane { display:none; }
+    .split.open .detail { display:flex; }
+    .back { display:inline-block; }
+    .subtabs { display:flex; }
+    .cbody { display:block; position:relative; }
+    #chatCol, #docCol { position:absolute; inset:0; }
+    #docCol { display:none; border-left:0; }
+    .cbody[data-sub=docs] #chatCol { display:none; }
+    .cbody[data-sub=docs] #docCol { display:block; }
+    .brand { display:none; }
   }
 </style>
 </head>
@@ -121,50 +155,106 @@
   <div id="srchbody" style="margin-top:8px"></div>
 </div></div>
 
-<div class="app">
-  <div class="panes">
-    <aside id="side" class="pane">
-      <div class="brand">📚 자료 노트북</div>
-      <div class="row" style="gap:6px"><input id="sq" type="search" placeholder="자료·대화 검색" onkeydown="if(event.key==='Enter')doSearch()"><button class="btn" style="padding:10px 12px" onclick="doSearch()">🔎</button></div>
-      <div class="ghead"><span>대화 그룹</span><button class="ghost" onclick="newGroup()">＋ 새 그룹</button></div>
-      <div id="groups"></div>
-      <div style="margin-top:14px"><button class="ghost" style="width:100%" onclick="openSys()">⚙ 점검 · Gemini 키</button></div>
-    </aside>
+<div id="genbox" class="modal"><div class="box">
+  <h3 style="margin-top:0">✨ 산출물 만들기</h3>
+  <div class="sub">이 대화에 올린 자료로 Gemini가 글을 만들어요. 결과는 📦 산출물 탭에 저장돼요.</div>
+  <button class="genbtn" onclick="makeOutput('summary')">📝 요약<span class="sub">자료 전체를 10줄 안쪽으로</span></button>
+  <button class="genbtn" onclick="makeOutput('faq')">❓ FAQ<span class="sub">자주 나올 질문 8개와 답</span></button>
+  <button class="genbtn" onclick="makeOutput('guide')">📚 학습 가이드<span class="sub">핵심 개념·용어·복습 질문</span></button>
+  <button class="genbtn" onclick="makeOutput('keypoints')">📌 핵심 정리<span class="sub">중요한 순서대로 번호 목록</span></button>
+  <div id="genmsg" class="sub" style="margin-top:10px"></div>
+  <div style="margin-top:10px"><button class="ghost" onclick="closeGen()">닫기</button></div>
+</div></div>
 
-    <section id="chat" class="pane on">
-      <div class="chead"><b id="gtitle">대화</b>
-        <span style="display:flex;gap:6px"><button class="ghost" onclick="renameGroup()">✎ 이름</button><button class="ghost" onclick="delGroup()">🗑 삭제</button></span></div>
-      <div id="log"><div class="sub">올린 자료를 바탕으로 질문해 보세요.</div></div>
-      <div class="ask">
-        <input id="q" type="text" placeholder="질문을 입력하세요" onkeydown="if(event.key==='Enter')send()">
-        <button class="btn" id="sendBtn" onclick="send()">보내기</button>
+<div id="toast"><span id="toastmsg"></span><button id="toastbtn" style="display:none" onclick="toastAct()"></button></div>
+
+<div class="app">
+  <header id="top">
+    <span class="brand">📚 자료 노트북</span>
+    <nav class="topnav">
+      <button id="n-home" class="on" onclick="goTab('home')">💬 대화</button>
+      <button id="n-out" onclick="goTab('out')">📦 산출물</button>
+    </nav>
+    <button class="ghost" onclick="openSys()" title="점검 · Gemini 키">⚙</button>
+  </header>
+
+  <div id="main">
+    <!-- ① 첫 화면: 대화 목록 → 누르면 그 대화 (채팅 + 자료) -->
+    <section id="v-home" class="view on">
+      <div class="split" id="homeSplit">
+        <aside class="listpane">
+          <div class="row" style="gap:6px"><input id="sq" type="search" placeholder="대화·자료 검색" onkeydown="if(event.key==='Enter')doSearch()"><button class="btn" style="padding:10px 12px" onclick="doSearch()">🔎</button></div>
+          <button class="btn" style="width:100%;margin-top:10px" onclick="newGroup()">＋ 새 대화</button>
+          <div id="glist"></div>
+        </aside>
+        <div class="detail" id="conv">
+          <div id="convEmpty" class="empty">왼쪽 목록에서 대화를 고르거나<br>＋ 새 대화로 시작하세요.</div>
+          <div id="convMain" style="display:none;flex:1;min-height:0;flex-direction:column">
+            <div class="chead"><button class="ghost back" onclick="closeConv()">← 목록</button><b id="gtitle">대화</b>
+              <span class="acts"><button class="ghost" onclick="openGen()">✨ 산출물</button><button class="ghost" onclick="renameGroup()">✎</button><button class="ghost" onclick="delGroup()">🗑</button></span></div>
+            <div class="subtabs"><button id="st-chat" class="on" onclick="subTab('chat')">💬 채팅</button><button id="st-docs" onclick="subTab('docs')">📄 자료 <span id="dcount"></span></button></div>
+            <div class="cbody" id="cbody" data-sub="chat">
+              <div id="chatCol">
+                <div id="log"></div>
+                <div class="ask">
+                  <input id="q" type="text" placeholder="질문을 입력하세요" onkeydown="if(event.key==='Enter')send()">
+                  <button class="btn" id="sendBtn" onclick="send()">보내기</button>
+                </div>
+              </div>
+              <div id="docCol">
+                <h2>📄 이 대화의 자료 <span class="sub" id="dcount2"></span></h2>
+                <div class="card">
+                  <label id="drop" for="file">📄 여기를 눌러 파일을 고르세요 (여러 개 가능)<br><span class="sub">PC에서는 끌어다 놓아도 돼요</span></label>
+                  <input id="file" type="file" accept=".txt,.md,.pdf" multiple hidden>
+                  <div id="queue"></div>
+                  <div style="margin-top:10px"><button class="btn" id="upBtn" onclick="upload()" disabled>파일 올리기</button>
+                    <button class="ghost" id="clrBtn" onclick="clearQueue()" style="display:none">목록 비우기</button></div>
+                  <div id="status" class="sub">txt, md, pdf (파일당 4MB까지, 자료 1개당 글 약 32만 자까지). 고른 파일은 목록에 쌓여요.</div>
+                </div>
+                <details class="card">
+                  <summary>글 직접 붙여넣기</summary>
+                  <div style="margin-top:10px"><input id="ptitle" type="text" placeholder="제목"></div>
+                  <div style="margin-top:8px"><textarea id="ptext" rows="6" placeholder="여기에 글을 붙여넣으세요"></textarea></div>
+                  <div style="margin-top:10px"><button class="btn" id="pasteBtn" onclick="pasteText()">올리기</button></div>
+                </details>
+                <div id="list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
-    <section id="docs" class="pane">
-      <h2>자료함 <span class="sub" id="dcount"></span></h2>
-      <div class="card">
-        <label id="drop" for="file">📄 여기를 눌러 파일을 고르세요 (여러 개 가능)<br><span class="sub">PC에서는 파일을 끌어다 놓아도 돼요</span></label>
-        <input id="file" type="file" accept=".txt,.md,.pdf" multiple hidden>
-        <div id="queue"></div>
-        <div style="margin-top:10px"><button class="btn" id="upBtn" onclick="upload()" disabled>파일 올리기</button>
-          <button class="ghost" id="clrBtn" onclick="clearQueue()" style="display:none">목록 비우기</button></div>
-        <div id="status" class="sub">txt, md, pdf (파일당 4MB까지, 자료 1개당 글 약 32만 자까지). 고른 파일은 목록에 쌓여요.</div>
+    <!-- ② 📦 산출물 탭: Gemini가 만들어 준 글 모아 보기·검색·이어가기 -->
+    <section id="v-out" class="view">
+      <div class="split" id="outSplit">
+        <aside class="listpane">
+          <div class="row" style="gap:6px"><input id="oq" type="search" placeholder="산출물 검색 (제목·내용)" onkeydown="if(event.key==='Enter')doOutSearch()"><button class="btn" style="padding:10px 12px" onclick="doOutSearch()">🔎</button></div>
+          <div id="ofilter" class="sub" style="margin-top:8px"></div>
+          <div id="olist"></div>
+        </aside>
+        <div class="detail" id="outDetail">
+          <div id="outEmpty" class="empty">산출물을 고르면 여기에 내용이 보여요.<br>대화 안에서 ✨ 산출물을 만들거나<br>답변 아래 📦 버튼으로 저장할 수 있어요.</div>
+          <div id="outMain" style="display:none;flex:1;min-height:0;flex-direction:column">
+            <div class="ohead"><div class="row"><button class="ghost back" onclick="closeOut()">← 목록</button><b id="otitle" style="flex:1;margin:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></b>
+              <span style="display:flex;gap:6px"><button class="ghost" onclick="renameOut()">✎</button><button class="ghost" onclick="delOut()">🗑</button></span></div>
+              <div id="ometa" class="sub" style="margin-top:6px"></div></div>
+            <div class="otools">
+              <button class="ghost" onclick="copyOut()">📋 복사</button>
+              <button class="ghost" onclick="downloadOut()">⬇ 내려받기</button>
+              <button class="ghost" onclick="toggleCont()">✍ 이어서 쓰기</button>
+              <button class="ghost" onclick="chatFromOut()">💬 대화로 이어가기</button>
+            </div>
+            <div id="otext" class="otext"></div>
+            <div id="contbox">
+              <textarea id="cinst" rows="2" placeholder="어떻게 이어 쓸까요? (예: 예시를 더 넣어줘) — 비워 두면 알아서 이어 써요"></textarea>
+              <div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn" id="contBtn" onclick="doContinue()">이어 쓰기 시작</button><span id="contmsg" class="sub"></span></div>
+            </div>
+          </div>
+        </div>
       </div>
-      <details class="card">
-        <summary>글 직접 붙여넣기</summary>
-        <div style="margin-top:10px"><input id="ptitle" type="text" placeholder="제목"></div>
-        <div style="margin-top:8px"><textarea id="ptext" rows="6" placeholder="여기에 글을 붙여넣으세요"></textarea></div>
-        <div style="margin-top:10px"><button class="btn" id="pasteBtn" onclick="pasteText()">올리기</button></div>
-      </details>
-      <div id="list"></div>
     </section>
   </div>
-  <nav id="tabs">
-    <button id="t-side" onclick="showPane('side')">🔎 그룹·검색</button>
-    <button id="t-chat" class="on" onclick="showPane('chat')">💬 채팅</button>
-    <button id="t-docs" onclick="showPane('docs')">📄 자료</button>
-  </nav>
 </div>
 
 <script>
@@ -175,14 +265,10 @@ function hl(text, terms){   // 검색어에 노란 표시
   for (const t of terms) { if (!t) continue; out = out.replace(new RegExp('('+esc(t).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'), '<mark>$1</mark>'); }
   return out;
 }
-// 폰에서는 한 번에 한 칸(그룹·검색 / 채팅 / 자료), PC에서는 세 칸이 모두 보여서 탭 표시만 바뀜
-function showPane(name){
-  for (const n of ['side','chat','docs']) { $(n).classList.toggle('on', n===name); $('t-'+n).classList.toggle('on', n===name); }
-}
+const KIND = {summary:'요약', faq:'FAQ', guide:'학습 가이드', keypoints:'핵심 정리', answer:'저장한 답변'};
+const JSONH = {'Content-Type':'application/json'};
 function getPw(){ try { return localStorage.getItem('pw') || ''; } catch(e) { return window._pw || ''; } }
 function setPw(v){ try { localStorage.setItem('pw', v); } catch(e) { window._pw = v; } }
-function lsGet(k){ try { return localStorage.getItem(k) || ''; } catch(e) { return ''; } }
-function lsSet(k,v){ try { localStorage.setItem(k, v); } catch(e) {} }
 function askPw(msg){ $('pwerr').textContent = msg || ''; $('login').style.display = 'flex'; $('pw').focus(); }
 function savePw(){ const v = $('pw').value.trim(); if (!v) return; setPw(v); $('pw').value=''; $('login').style.display='none'; boot(); }
 async function api(path, opts){
@@ -197,7 +283,18 @@ async function api(path, opts){
   }
   return data;
 }
-const JSONH = {'Content-Type':'application/json'};
+let _toastFn = null, _toastT = 0;
+function toast(msg, label, fn){
+  $('toastmsg').textContent = msg; _toastFn = fn || null;
+  $('toastbtn').style.display = label ? '' : 'none'; $('toastbtn').textContent = label || '';
+  $('toast').style.display = 'flex'; clearTimeout(_toastT); _toastT = setTimeout(() => { $('toast').style.display = 'none'; }, label ? 7000 : 3500);
+}
+function toastAct(){ $('toast').style.display = 'none'; if (_toastFn) _toastFn(); }
+function goTab(name){
+  $('v-home').classList.toggle('on', name==='home'); $('v-out').classList.toggle('on', name==='out');
+  $('n-home').classList.toggle('on', name==='home'); $('n-out').classList.toggle('on', name==='out');
+  if (name==='out') loadOutputs();
+}
 
 // ---- Gemini 키 팝업 ----
 function openKey(msg){ $('keymsg').textContent = msg || ''; $('keybox').style.display = 'flex'; $('gkey').focus(); }
@@ -207,7 +304,7 @@ async function saveKey(){
   $('keyBtn').disabled = true; $('keymsg').textContent = '구글에 확인하는 중…';
   try {
     const r = await api('/settings/gemini', {method:'POST', headers:JSONH, body: JSON.stringify({key})});
-    $('gkey').value = ''; closeKey(); $('status').innerHTML = '<span class="ok">Gemini 키 저장 완료 (끝 '+esc(r.tail)+'). 이제 파일을 올려 보세요.</span>';
+    $('gkey').value = ''; closeKey(); toast('Gemini 키 저장 완료 (끝 '+r.tail+'). 이제 자료를 올려 보세요.');
     if ($('sysbox').style.display === 'flex') runDiag();
   } catch(e) { $('keymsg').innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
   $('keyBtn').disabled = false;
@@ -228,22 +325,106 @@ async function runDiag(){
   } catch(e) { $('diag').innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
 }
 
-// ---- 자료함 ----
-async function load(){
-  if (!getPw()) { askPw(''); return; }
-  try {
-    const docs = await api('/documents');
-    $('dcount').textContent = docs.length ? '('+docs.length+'개)' : '';
-    $('list').innerHTML = docs.length ? docs.map(d => `
-      <div class="card row" id="doc-${esc(d.id)}"><div><b>${esc(d.title)}</b><div class="sub">조각 ${d.chunk_count}개 · ${esc(d.created_at)}</div></div>
-      <button class="ghost" onclick="del('${esc(d.id)}')">삭제</button></div>`).join('')
-      : '<div class="sub">아직 올린 자료가 없어요.</div>';
-  } catch(e) { $('list').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; }
+// =====================  ① 대화 (첫 화면)  =====================
+let GROUPS = [], cur = '', MSGS = [], DOCS = [], openSeq = 0;
+function bucket(ts){   // "2026-11-14 05:41" → 오늘/어제/최근 7일/이전
+  const d = new Date(String(ts).replace(' ', 'T')); if (isNaN(d)) return '이전';
+  const t0 = new Date(); t0.setHours(0,0,0,0); const days = Math.floor((t0 - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  return days <= 0 ? '오늘' : days === 1 ? '어제' : days <= 7 ? '최근 7일' : '이전';
 }
-// ---- 여러 파일 올리기: 목록에 쌓고, 하나씩 순서대로, 실패해도 나머지는 계속 ----
+function shortTime(ts){ return bucket(ts) === '오늘' ? String(ts).slice(11) : String(ts).slice(5, 10).replace('-', '/'); }
+function renderGroupList(){
+  if (!GROUPS.length) { $('glist').innerHTML = '<div class="sub" style="margin:18px 4px;line-height:1.6">아직 대화가 없어요.<br>＋ 새 대화를 눌러 시작하세요.</div>'; return; }
+  let html = '', last = '';
+  for (const g of GROUPS) {
+    const b = bucket(g.updated_at || g.created_at);
+    if (b !== last) { html += '<div class="ghead">'+b+'</div>'; last = b; }
+    html += `<div class="g ${g.id===cur?'on':''}" onclick="openGroup('${esc(g.id)}')"><div class="t">${esc(g.title)}</div><span class="sub">${esc(shortTime(g.updated_at || g.created_at))}</span></div>`;
+  }
+  $('glist').innerHTML = html;
+}
+async function loadGroups(){ GROUPS = await api('/chats'); renderGroupList(); const g = GROUPS.find(x => x.id === cur); if (g) $('gtitle').textContent = g.title; }
+function showConv(on){ $('convEmpty').style.display = on ? 'none' : 'flex'; $('convMain').style.display = on ? 'flex' : 'none'; $('homeSplit').classList.toggle('open', on); }
+function closeConv(){ cur = ''; openSeq++; showConv(false); renderGroupList(); }
+function subTab(n){ $('cbody').dataset.sub = n; $('st-chat').classList.toggle('on', n==='chat'); $('st-docs').classList.toggle('on', n==='docs'); }
+function msgHtml(m, i){
+  if (m.role === 'user') return `<div class="q" data-i="${i}">${esc(m.text)}</div>`;
+  const sid = 's'+i+'_';
+  return `<div class="card" data-i="${i}"><div class="msg">${esc(m.text)}</div>` +
+    (m.sources||[]).map(s => `<span class="chip" onclick="toggle('${sid}${s.n}')">[${s.n}] ${esc(s.title)}</span>`).join('') +
+    (m.sources||[]).map(s => `<div class="snip" id="${sid}${s.n}">${esc(s.snippet)}…</div>`).join('') +
+    `<div class="mact"><button class="ghost sm" onclick="saveAnswer(${i})">📦 산출물로 저장</button></div></div>`;
+}
+function renderLog(focusIdx){
+  $('log').innerHTML = MSGS.length ? MSGS.map(msgHtml).join('') : '<div class="sub">이 대화에 자료를 올리고(오른쪽/자료 탭) 질문해 보세요.</div>';
+  const el = focusIdx !== undefined ? $('log').querySelector('[data-i="'+focusIdx+'"]') : null;
+  if (el) { el.scrollIntoView({block:'center'}); el.classList.add('flash'); } else { $('log').scrollTop = $('log').scrollHeight; }
+}
+async function openGroup(gid, focusIdx){
+  const same = gid === cur; const seq = ++openSeq; cur = gid; renderGroupList(); showConv(true);
+  if (!same) { if (!running) { Q = []; renderQ(); $('status').textContent = ''; } subTab('chat'); }
+  $('log').innerHTML = '<div class="sub">불러오는 중…</div>';
+  try {
+    const [r, docs] = await Promise.all([api('/chats/'+gid), api('/chats/'+gid+'/docs')]);
+    if (seq !== openSeq) return;     // 그 사이 다른 대화를 눌렀으면 이전 결과는 버림
+    MSGS = r.messages; DOCS = docs; $('gtitle').textContent = r.title; renderLog(focusIdx); renderDocs();
+  } catch(e) { if (seq === openSeq) $('log').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; }
+}
+async function newGroup(){
+  try { const g = await api('/chats', {method:'POST', headers:JSONH, body: JSON.stringify({title:''})}); GROUPS.unshift(g); await openGroup(g.id); $('q').focus(); }
+  catch(e) { toast(e.message); }
+}
+async function renameGroup(){
+  const g = GROUPS.find(x => x.id === cur); if (!g) return;
+  const t = prompt('대화 이름', g.title); if (t === null || !t.trim()) return;
+  try { await api('/chats/'+cur, {method:'PATCH', headers:JSONH, body: JSON.stringify({title:t})}); await loadGroups(); } catch(e) { toast(e.message); }
+}
+async function delGroup(){
+  const g = GROUPS.find(x => x.id === cur); if (!g) return;
+  if (!confirm('"'+g.title+'" 대화와 이 대화에 올린 자료를 삭제할까요?\n(📦 산출물은 그대로 남아요)')) return;
+  try { await api('/chats/'+cur, {method:'DELETE'}); closeConv(); await loadGroups(); } catch(e) { toast(e.message); }
+}
+async function send(){
+  const q = $('q').value.trim(); if (!q || !cur) return;
+  const gid = cur; $('q').value = ''; $('sendBtn').disabled = true;
+  const log = $('log'); if (!MSGS.length) log.innerHTML = '';
+  const qi = MSGS.length;
+  log.insertAdjacentHTML('beforeend', '<div class="q" data-i="'+qi+'">'+esc(q)+'</div>');
+  const holder = document.createElement('div'); holder.className = 'card'; holder.innerHTML = '<span class="sub">답변 만드는 중…</span>';
+  log.appendChild(holder); log.scrollTop = log.scrollHeight;
+  try {
+    const r = await api('/chats/'+gid+'/ask', {method:'POST', headers:JSONH, body: JSON.stringify({question:q})});
+    if (gid === cur) {
+      MSGS.push({role:'user', text:q}, {role:'assistant', text:r.answer, sources:r.sources});
+      holder.outerHTML = msgHtml(MSGS[qi+1], qi+1);
+    }
+    loadGroups().catch(()=>{});   // 첫 질문이면 제목이 자동으로 지어지고, 최근 대화가 위로 올라감
+  } catch(e) { holder.innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
+  $('sendBtn').disabled = false; log.scrollTop = log.scrollHeight;
+}
+function toggle(id){ const e = $(id); e.style.display = e.style.display==='block' ? 'none' : 'block'; }
+async function saveAnswer(i){
+  const m = MSGS[i]; if (!m || !cur) return;
+  const qtext = (MSGS[i-1] && MSGS[i-1].role === 'user') ? MSGS[i-1].text : '';
+  try {
+    const o = await api('/chats/'+cur+'/save-answer', {method:'POST', headers:JSONH, body: JSON.stringify({title: '답변 · '+(qtext.replace(/\s+/g,' ').slice(0,24) || '저장'), text: m.text})});
+    toast('📦 산출물에 저장했어요', '보기', () => goOutput(o.id));
+  } catch(e) { toast(e.message); }
+}
+
+// ---- 이 대화의 자료 ----
+function renderDocs(){
+  $('dcount').textContent = DOCS.length ? '('+DOCS.length+')' : ''; $('dcount2').textContent = DOCS.length ? '('+DOCS.length+'개)' : '';
+  $('list').innerHTML = DOCS.length ? DOCS.map(d => `
+    <div class="card row" id="doc-${esc(d.id)}"><div style="min-width:0"><b style="word-break:break-all">${esc(d.title)}</b><div class="sub">조각 ${d.chunk_count}개 · ${esc(d.created_at)}</div></div>
+    <button class="ghost" onclick="delDoc('${esc(d.id)}')">삭제</button></div>`).join('')
+    : '<div class="sub">이 대화에는 아직 자료가 없어요.</div>';
+}
+async function loadDocs(){ if (!cur) return; const gid = cur; const d = await api('/chats/'+gid+'/docs'); if (gid === cur) { DOCS = d; renderDocs(); } }
 const MAX_MB = 4, OK_EXT = /\.(txt|md|pdf)$/i;
 let Q = [], running = false;   // Q: {file, state:'wait|run|ok|err', msg}
 function addFiles(list){
+  if (!cur) return;
   for (const f of list) {
     if (Q.some(x => x.file.name === f.name && x.file.size === f.size && x.state !== 'ok')) continue;
     const it = {file: f, state: 'wait', msg: '대기'};
@@ -266,10 +447,10 @@ function renderQ(){
 function rmQ(i){ if (!running) { Q.splice(i,1); renderQ(); } }
 function clearQueue(){ if (!running) { Q = []; renderQ(); $('status').textContent = ''; } }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-async function sendOne(it){
+async function sendOne(gid, it){
   for (let t = 0; t < 2; t++) {
     const fd = new FormData(); fd.append('file', it.file);
-    try { return await api('/documents', {method:'POST', body: fd}); }
+    try { return await api('/chats/'+gid+'/docs', {method:'POST', body: fd}); }
     catch(e) {
       if (e.status === 429 && t === 0) {            // 무료 한도: 한 번만 20초 쉬고 재시도
         for (let s = 20; s > 0; s--) { it.msg = '한도 대기 '+s+'초 후 재시도'; renderQ(); await sleep(1000); }
@@ -280,14 +461,14 @@ async function sendOne(it){
   }
 }
 async function upload(){
-  if (running) return;
-  running = true; let ok = 0, fail = 0;
+  if (running || !cur) return;
+  const gid = cur; running = true; let ok = 0, fail = 0;
   const todo = Q.filter(x => x.state === 'wait');
   for (let k = 0; k < todo.length; k++) {
     const it = todo[k];
     it.state = 'run'; it.msg = '처리 중…'; renderQ();
     $('status').textContent = `${k+1}/${todo.length} · ${it.file.name} (글 추출 → 조각내기 → 임베딩, 길면 1분쯤 걸려요)`;
-    try { const r = await sendOne(it); it.state = 'ok'; it.msg = '조각 '+r.chunk_count+'개'; ok++; }
+    try { const r = await sendOne(gid, it); it.state = 'ok'; it.msg = '조각 '+r.chunk_count+'개'; ok++; }
     catch(e) {
       it.state = 'err'; it.msg = e.message; fail++;
       if (e.message === '비밀번호가 필요합니다') { for (const x of todo.slice(k+1)) { x.state='wait'; x.msg='대기'; } break; }
@@ -295,88 +476,39 @@ async function upload(){
     renderQ();
   }
   running = false; renderQ();
-  $('status').innerHTML = `<span class="${fail ? 'err' : 'ok'}">완료 ${ok}개${fail ? ' · 실패 '+fail+'개 (위 목록의 빨간 글씨 확인)' : ''}.</span> 왼쪽 채팅에서 질문해 보세요.`;
-  load();
+  $('status').innerHTML = `<span class="${fail ? 'err' : 'ok'}">완료 ${ok}개${fail ? ' · 실패 '+fail+'개 (위 목록의 빨간 글씨 확인)' : ''}.</span> 채팅에서 질문해 보세요.`;
+  loadDocs().catch(()=>{});
 }
 $('file').addEventListener('change', e => { addFiles(e.target.files); e.target.value = ''; });
 ['dragenter','dragover'].forEach(ev => $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('over'); }));
 ['dragleave','drop'].forEach(ev => $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('over'); }));
 $('drop').addEventListener('drop', e => addFiles(e.dataTransfer.files));
 async function pasteText(){
-  const text = $('ptext').value.trim(); if (!text) return;
+  const text = $('ptext').value.trim(); if (!text || !cur) return;
   $('pasteBtn').disabled = true; $('status').textContent = '처리 중…';
   try {
-    await api('/documents/text', {method:'POST', headers:JSONH, body: JSON.stringify({title: $('ptitle').value, text})});
-    $('ptext').value=''; $('ptitle').value=''; $('status').textContent = '완료! 채팅에서 질문해 보세요.'; load();
+    await api('/chats/'+cur+'/docs/text', {method:'POST', headers:JSONH, body: JSON.stringify({title: $('ptitle').value, text})});
+    $('ptext').value=''; $('ptitle').value=''; $('status').textContent = '완료! 채팅에서 질문해 보세요.'; loadDocs();
   } catch(e) { $('status').innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
   $('pasteBtn').disabled = false;
 }
-async function del(id){ if (confirm('이 자료를 삭제할까요?')) { try { await api('/documents/'+id, {method:'DELETE'}); } catch(e) { alert(e.message); } load(); } }
+async function delDoc(id){ if (confirm('이 자료를 삭제할까요?')) { try { await api('/chats/'+cur+'/docs/'+id, {method:'DELETE'}); } catch(e) { toast(e.message); } loadDocs(); } }
 
-// ---- 채팅 그룹 ----
-let GROUPS = [], cur = '', curCount = 0, openSeq = 0;
-function renderGroups(){
-  $('groups').innerHTML = GROUPS.map(g => `<div class="g ${g.id===cur?'on':''}" onclick="openGroup('${esc(g.id)}')">${esc(g.title)}<span class="sub">${esc(g.created_at)}</span></div>`).join('');
-  const g = GROUPS.find(x => x.id === cur); $('gtitle').textContent = g ? g.title : '대화';
-}
-async function refreshGroups(){ GROUPS = await api('/chats'); renderGroups(); }
-async function initChats(){
-  await refreshGroups();
-  const saved = lsGet('grp');
-  await openGroup(GROUPS.some(g => g.id === saved) ? saved : GROUPS[0].id, undefined, true);
-}
-function msgHtml(m, i, gid){
-  if (m.role === 'user') return `<div class="q" data-i="${i}">${esc(m.text)}</div>`;
-  const sid = 's'+i+'_';
-  return `<div class="card" data-i="${i}"><div class="msg">${esc(m.text)}</div>` +
-    (m.sources||[]).map(s => `<span class="chip" onclick="toggle('${sid}${s.n}')">[${s.n}] ${esc(s.title)}</span>`).join('') +
-    (m.sources||[]).map(s => `<div class="snip" id="${sid}${s.n}">${esc(s.snippet)}…</div>`).join('') + `</div>`;
-}
-async function openGroup(gid, focusIdx, keepPane){
-  const seq = ++openSeq; cur = gid; lsSet('grp', gid); renderGroups();
-  $('log').innerHTML = '<div class="sub">불러오는 중…</div>';
+// ---- ✨ 산출물 만들기 ----
+function openGen(){ if (!cur) return; $('genmsg').textContent = DOCS.length ? '' : '이 대화에 올린 자료가 없어요. 먼저 자료를 올려 주세요.'; $('genbox').style.display = 'flex'; }
+function closeGen(){ $('genbox').style.display = 'none'; }
+async function makeOutput(kind){
+  if (!cur) return; const gid = cur;
+  const btns = document.querySelectorAll('.genbtn'); btns.forEach(b => b.disabled = true);
+  $('genmsg').textContent = '🔄 Gemini가 만드는 중… (길면 1분쯤 걸려요)';
   try {
-    const r = await api('/chats/'+gid);
-    if (seq !== openSeq) return;     // 그 사이 다른 그룹을 눌렀으면 이전 결과는 버림
-    curCount = r.messages.length;
-    $('log').innerHTML = r.messages.length ? r.messages.map((m,i) => msgHtml(m,i,gid)).join('') : '<div class="sub">올린 자료를 바탕으로 질문해 보세요.</div>';
-    const el = focusIdx !== undefined ? $('log').querySelector('[data-i="'+focusIdx+'"]') : null;
-    if (el) { el.scrollIntoView({block:'center'}); el.classList.add('flash'); } else { $('log').scrollTop = $('log').scrollHeight; }
-  } catch(e) { if (seq === openSeq) $('log').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; }
-  if (!keepPane) showPane('chat');
+    const o = await api('/chats/'+gid+'/generate', {method:'POST', headers:JSONH, body: JSON.stringify({kind})});
+    closeGen(); toast('📦 '+(KIND[kind]||'산출물')+'을(를) 만들었어요', '보기', () => goOutput(o.id));
+  } catch(e) { $('genmsg').innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
+  btns.forEach(b => b.disabled = false);
 }
-async function newGroup(){
-  try { const g = await api('/chats', {method:'POST', headers:JSONH, body: JSON.stringify({title:''})}); GROUPS.unshift(g); await openGroup(g.id); $('q').focus(); }
-  catch(e) { alert(e.message); }
-}
-async function renameGroup(){
-  const g = GROUPS.find(x => x.id === cur); if (!g) return;
-  const t = prompt('그룹 이름', g.title); if (t === null || !t.trim()) return;
-  try { await api('/chats/'+cur, {method:'PATCH', headers:JSONH, body: JSON.stringify({title:t})}); await refreshGroups(); } catch(e) { alert(e.message); }
-}
-async function delGroup(){
-  const g = GROUPS.find(x => x.id === cur); if (!g) return;
-  if (!confirm('"'+g.title+'" 그룹과 대화 기록을 삭제할까요? (자료는 지워지지 않아요)')) return;
-  try { await api('/chats/'+cur, {method:'DELETE'}); await refreshGroups(); await openGroup(GROUPS[0].id); } catch(e) { alert(e.message); }
-}
-async function send(){
-  const q = $('q').value.trim(); if (!q || !cur) return;
-  const gid = cur; $('q').value = ''; $('sendBtn').disabled = true;
-  const log = $('log'); if (log.firstElementChild && log.firstElementChild.classList.contains('sub')) log.innerHTML = '';
-  const first = curCount === 0;
-  log.insertAdjacentHTML('beforeend', '<div class="q" data-i="'+curCount+'">'+esc(q)+'</div>');
-  const holder = document.createElement('div'); holder.className = 'card'; holder.dataset.i = curCount + 1; holder.innerHTML = '<span class="sub">답변 만드는 중…</span>';
-  log.appendChild(holder); log.scrollTop = log.scrollHeight;
-  try {
-    const r = await api('/chats/'+gid+'/ask', {method:'POST', headers:JSONH, body: JSON.stringify({question:q})});
-    if (gid === cur) { holder.outerHTML = msgHtml({role:'assistant', text:r.answer, sources:r.sources}, curCount+1, gid); curCount += 2; }
-    if (first) refreshGroups().catch(()=>{});   // 첫 질문이면 그룹 이름이 자동으로 지어짐
-  } catch(e) { holder.innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
-  $('sendBtn').disabled = false; log.scrollTop = log.scrollHeight;
-}
-function toggle(id){ const e = $(id); e.style.display = e.style.display==='block' ? 'none' : 'block'; }
 
-// ---- 검색 (자료 제목·내용 + 채팅 기록) ----
+// ---- 🔎 대화·자료 검색 ----
 function closeSearch(){ $('srch').style.display = 'none'; }
 async function doSearch(){
   const q = $('sq').value.trim(); if (!q) return;
@@ -384,21 +516,103 @@ async function doSearch(){
   $('srch').style.display = 'flex'; $('srchbody').innerHTML = '<div class="sub">찾는 중…</div>';
   try {
     const r = await api('/search?q='+encodeURIComponent(q));
-    const docs = r.docs.map(d => `<div class="hit" onclick="goDoc('${esc(d.id)}')"><div class="t">📄 ${hl(d.title, terms)}</div>` +
+    const groups = r.groups.map(g => `<div class="hit" onclick="goChat('${esc(g.id)}')"><div class="t">💬 ${hl(g.title, terms)}</div></div>`).join('');
+    const docs = r.docs.map(d => `<div class="hit" onclick="goDoc('${esc(d.group_id)}','${esc(d.id)}')"><div class="t">📄 ${hl(d.title, terms)} <span class="sub">· ${esc(d.group_title)}</span></div>` +
       d.snippets.map(s => `<div class="s">${hl(s, terms)}</div>`).join('') + `</div>`).join('');
     const chats = r.chats.map(h => `<div class="hit" onclick="goChat('${esc(h.group_id)}', ${h.index})"><div class="t">💬 ${esc(h.group_title)} <span class="sub">· ${h.role==='user'?'내 질문':'답변'} · ${esc(h.t)}</span></div><div class="s">${hl(h.snippet, terms)}</div></div>`).join('');
-    $('srchbody').innerHTML = (docs || chats) ?
-      (docs ? '<div class="sub" style="margin-top:6px">자료 '+r.docs.length+'건</div>'+docs : '') + (chats ? '<div class="sub" style="margin-top:10px">채팅 기록 '+r.chats.length+'건</div>'+chats : '')
-      : '<div class="sub">"'+esc(q)+'"에 맞는 자료나 대화가 없어요. 단어를 줄여 보세요.</div>';
+    const sec = (label, n, html) => html ? '<div class="sub" style="margin-top:10px">'+label+' '+n+'건</div>'+html : '';
+    $('srchbody').innerHTML = (groups || docs || chats) ? sec('대화 제목', r.groups.length, groups) + sec('자료', r.docs.length, docs) + sec('채팅 기록', r.chats.length, chats)
+      : '<div class="sub">"'+esc(q)+'"에 맞는 대화나 자료가 없어요. 단어를 줄여 보세요.<br>(Gemini가 만든 글은 📦 산출물 탭에서 검색해요)</div>';
   } catch(e) { $('srchbody').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; }
 }
-function goDoc(id){
-  closeSearch(); showPane('docs');
-  const el = $('doc-'+id); if (el) { el.scrollIntoView({block:'center'}); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+async function goChat(gid, idx){ closeSearch(); goTab('home'); await openGroup(gid, idx); }
+async function goDoc(gid, id){
+  closeSearch(); goTab('home'); await openGroup(gid); subTab('docs');
+  const el = $('doc-'+id); if (el) { el.scrollIntoView({block:'center'}); el.classList.add('flash'); }
 }
-async function goChat(gid, idx){ closeSearch(); await openGroup(gid, idx); }
 
-async function boot(){ await load(); if (getPw()) { try { await initChats(); } catch(e) {} if (!window._keyChecked) { window._keyChecked = true; checkKeyOnce(); } } }
+// =====================  ② 📦 산출물  =====================
+let OUTS = [], curOut = null, outSeq = 0;
+function outItem(o){
+  return `<div class="g ${curOut && curOut.id===o.id ? 'on':''}" onclick="openOutput('${esc(o.id)}')"><div class="t"><span class="badge ${esc(o.kind)}">${esc(KIND[o.kind]||'산출물')}</span>${esc(o.title)}</div>` +
+    `<span class="sub">${esc(o.group_title ? '원본: '+o.group_title+' · ' : '')}${esc(o.updated_at)}</span>` +
+    (o.snippet ? `<span class="sub" style="margin-top:4px">${hl(o.snippet, window._oterms||[])}</span>` : '') + `</div>`;
+}
+function renderOutList(items, note){
+  $('ofilter').innerHTML = note || '';
+  $('olist').innerHTML = items.length ? items.map(outItem).join('') : '<div class="sub" style="margin:18px 4px;line-height:1.6">'+(note ? '찾은 산출물이 없어요.' : '아직 산출물이 없어요.<br>대화 안에서 ✨ 산출물을 만들거나, 답변 아래 📦 버튼으로 저장해 보세요.')+'</div>';
+}
+async function loadOutputs(){
+  try { OUTS = await api('/outputs'); if (!$('oq').value.trim()) renderOutList(OUTS); } catch(e) { $('olist').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; }
+}
+async function doOutSearch(){
+  const q = $('oq').value.trim(); if (!q) { renderOutList(OUTS); return; }
+  window._oterms = q.toLowerCase().split(/\s+/).filter(Boolean);
+  $('ofilter').textContent = '찾는 중…';
+  try {
+    const r = await api('/search?scope=outputs&q='+encodeURIComponent(q));
+    const meta = Object.fromEntries(OUTS.map(o => [o.id, o]));
+    renderOutList(r.outputs.map(o => ({...o, group_title: (meta[o.id]||{}).group_title || ''})), `검색 결과 ${r.outputs.length}건 · <a href="#" onclick="$('oq').value='';renderOutList(OUTS);return false">전체 보기</a>`);
+  } catch(e) { $('ofilter').innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
+}
+function showOut(on){ $('outEmpty').style.display = on ? 'none' : 'flex'; $('outMain').style.display = on ? 'flex' : 'none'; $('outSplit').classList.toggle('open', on); }
+function markOut(id){ document.querySelectorAll('#olist .g').forEach(el => el.classList.toggle('on', !!id && (el.getAttribute('onclick')||'').includes("'"+id+"'"))); }
+function closeOut(){ curOut = null; outSeq++; showOut(false); $('contbox').style.display = 'none'; markOut(null); }
+function renderOut(){
+  const o = curOut; $('otitle').textContent = o.title;
+  $('ometa').innerHTML = `<span class="badge ${esc(o.kind)}">${esc(KIND[o.kind]||'산출물')}</span>` +
+    (o.group_title ? '원본 대화: '+(o.group_alive ? `<a href="#" onclick="goChat('${esc(o.group_id)}');return false">${esc(o.group_title)}</a>` : esc(o.group_title))+' · ' : '') + esc(o.updated_at) + ' · '+o.chars+'자';
+  $('otext').textContent = o.text;
+}
+async function openOutput(id){
+  const seq = ++outSeq; showOut(true); $('otext').textContent = '불러오는 중…'; $('contbox').style.display = 'none'; $('contmsg').textContent = '';
+  try { const o = await api('/outputs/'+id); if (seq !== outSeq) return; curOut = o; renderOut(); markOut(id); }
+  catch(e) { if (seq === outSeq) $('otext').innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
+}
+async function goOutput(id){ goTab('out'); await openOutput(id); loadOutputs(); }
+async function renameOut(){
+  if (!curOut) return; const t = prompt('산출물 제목', curOut.title); if (t === null || !t.trim()) return;
+  try { const o = await api('/outputs/'+curOut.id, {method:'PATCH', headers:JSONH, body: JSON.stringify({title:t})}); curOut = {...curOut, ...o}; renderOut(); loadOutputs(); } catch(e) { toast(e.message); }
+}
+async function delOut(){
+  if (!curOut || !confirm('"'+curOut.title+'" 산출물을 삭제할까요?')) return;
+  try { await api('/outputs/'+curOut.id, {method:'DELETE'}); closeOut(); await loadOutputs(); toast('삭제했어요'); } catch(e) { toast(e.message); }
+}
+async function copyOut(){
+  if (!curOut) return;
+  try { await navigator.clipboard.writeText(curOut.text); toast('📋 복사했어요'); }
+  catch(e) { const t = document.createElement('textarea'); t.value = curOut.text; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); toast('📋 복사했어요'); } catch(_) { toast('복사하지 못했어요'); } t.remove(); }
+}
+function downloadOut(){
+  if (!curOut) return; const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([curOut.text], {type:'text/markdown;charset=utf-8'})); a.download = curOut.title.replace(/[\\/:*?"<>|]/g, '_') + '.md';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function toggleCont(){ const b = $('contbox'); b.style.display = b.style.display === 'block' ? 'none' : 'block'; if (b.style.display === 'block') $('cinst').focus(); }
+async function doContinue(){
+  if (!curOut) return; const id = curOut.id;
+  $('contBtn').disabled = true; $('contmsg').textContent = '🔄 Gemini가 이어서 쓰는 중…';
+  try {
+    const o = await api('/outputs/'+id+'/continue', {method:'POST', headers:JSONH, body: JSON.stringify({instruction: $('cinst').value})});
+    if (curOut && curOut.id === id) { curOut = {...curOut, ...o}; renderOut(); $('otext').scrollTop = $('otext').scrollHeight; }
+    $('cinst').value = ''; $('contmsg').textContent = '✅ 이어 썼어요'; loadOutputs();
+  } catch(e) { $('contmsg').innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
+  $('contBtn').disabled = false;
+}
+async function chatFromOut(){
+  if (!curOut) return;
+  try {
+    const r = await api('/outputs/'+curOut.id+'/open-chat', {method:'POST'});
+    goTab('home'); await loadGroups(); await openGroup(r.group_id); subTab('chat');
+    toast(r.created ? '이 글을 자료로 넣은 새 대화를 열었어요' : '이어가던 대화를 다시 열었어요');
+  } catch(e) { toast(e.message); }
+}
+
+async function boot(){
+  if (!getPw()) { askPw(''); return; }
+  try { await loadGroups(); } catch(e) { return; }
+  if (!window._keyChecked) { window._keyChecked = true; checkKeyOnce(); }
+}
 boot();
 </script>
 </body>

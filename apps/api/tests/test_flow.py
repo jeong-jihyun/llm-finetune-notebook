@@ -1,5 +1,5 @@
-"""가짜 임베딩/답변으로 업로드→질문→삭제 흐름과 모델 선택, 비밀번호 확인을 점검한다.
-실행: cd apps/api && python -m pytest -q   (또는 python tests/test_flow.py)
+"""가짜 임베딩/답변으로 대화 그룹(자료+채팅), 자동 제목, 산출물, 검색, 이어가기를 점검한다.
+실행: cd apps/api && python tests/test_flow.py
 """
 import hashlib
 import io
@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app import storage  # noqa: E402
 from app.config import settings  # noqa: E402
-from app.services import llm  # noqa: E402
+from app.services import chats, llm  # noqa: E402
 
 settings.app_password = "test-pw"
 settings.data_dir = tempfile.mkdtemp()
@@ -33,52 +33,159 @@ def fake_embed(texts):
     return out
 
 
+def fake_complete(system, user):
+    if "글을 만드는" in system:  # 산출물 만들기 / 이어 쓰기
+        return "새로 이어진 내용입니다" if "이어 쓰기 요청" in user else "# 요약\n흑돼지와 감귤 정리"
+    if "제목" in system:  # 대화 제목 자동 짓기
+        return "\"제주 여행 먹거리\""
+    return "테스트 답변 [1]"
+
+
 llm.embed = fake_embed
-llm.complete = lambda system, user: "테스트 답변 [1]"
+llm.complete = fake_complete
 from app.main import app  # noqa: E402
 
 c = TestClient(app)
 
 
+def mk(title=""):
+    return c.post("/chats", headers=H, json={"title": title}).json()
+
+
+def up_text(gid, title, text):
+    return c.post(f"/chats/{gid}/docs/text", headers=H, json={"title": title, "text": text})
+
+
 def test_auth():
-    assert c.get("/documents").status_code == 401
-    assert c.get("/documents", headers={"X-App-Password": "wrong"}).status_code == 401
-    assert c.get("/documents", headers=H).status_code == 200
+    for path in ("/chats", "/outputs", "/search?q=x", "/settings/gemini"):
+        assert c.get(path).status_code == 401, path
+        assert c.get(path, headers={"X-App-Password": "wrong"}).status_code == 401, path
     assert c.get("/health").json() == {"ok": True}
     assert "자료 노트북" in c.get("/").text
+    assert c.get("/documents", headers=H).status_code == 404  # 옛 주소는 없어짐
 
 
-def test_flow():
-    r = c.post("/documents", headers=H, files={"file": ("a.txt", "파인튜닝은 모델을 추가로 학습시키는 방법입니다. 라그는 검색해서 답하는 방법입니다.".encode(), "text/plain")})
+def test_groups_auto_title_and_resume():
+    """첫 화면 목록: 새 대화 → 첫 질문으로 제목 자동 → 다시 열어 이어서 대화."""
+    assert c.get("/chats", headers=H).json() == []
+    g = mk()
+    assert g["title"] == "새 대화" and g["auto"] is True
+    gid = g["id"]
+    r = c.post(f"/chats/{gid}/ask", headers=H, json={"question": "제주도에서 뭘 먹을까?"})
+    assert r.status_code == 200 and "자료가 없습니다" in r.json()["answer"]
+    now = c.get("/chats", headers=H).json()[0]
+    assert now["title"] == "제주 여행 먹거리" and now["auto"] is False  # 따옴표 제거된 자동 제목
+    c.post(f"/chats/{gid}/ask", headers=H, json={"question": "렌터카는?"})
+    assert c.get("/chats", headers=H).json()[0]["title"] == "제주 여행 먹거리"  # 두 번째 질문은 제목을 안 바꿈
+    opened = c.get(f"/chats/{gid}", headers=H).json()  # 목록에서 선택해 다시 열기
+    assert opened["title"] == "제주 여행 먹거리" and [m["role"] for m in opened["messages"]] == ["user", "assistant"] * 2
+    assert c.post(f"/chats/{gid}/ask", headers=H, json={"question": " "}).status_code == 400
+    # 이름을 직접 바꾸면 자동 제목이 덮어쓰지 않음, 빈 이름은 거절
+    assert c.patch(f"/chats/{gid}", headers=H, json={"title": "내 이름"}).json()["title"] == "내 이름"
+    assert c.patch(f"/chats/{gid}", headers=H, json={"title": " "}).status_code == 400
+    # 최근 활동 순서
+    g2 = mk("직접 지은 이름")
+    assert g2["auto"] is False
+    for x in chats._read_index():
+        x["updated_at"] = "2026-01-01 00:00" if x["id"] == g2["id"] else "2026-02-01 00:00"
+    assert [x["id"] for x in c.get("/chats", headers=H).json()] == [gid, g2["id"]]
+    assert c.get("/chats/gnotexist0000", headers=H).status_code == 404
+    assert c.get("/chats/..%2Fx", headers=H).status_code in (404, 405)
+    for x in c.get("/chats", headers=H).json():
+        c.delete(f"/chats/{x['id']}", headers=H)
+    assert c.get("/chats", headers=H).json() == []
+
+
+def test_docs_are_per_group():
+    a, b = mk("A방")["id"], mk("B방")["id"]
+    r = c.post(f"/chats/{a}/docs", headers=H, files={"file": ("a.txt", "파인튜닝은 모델을 추가로 학습시키는 방법입니다. 라그는 검색해서 답하는 방법입니다.".encode(), "text/plain")})
     assert r.status_code == 200 and r.json()["chunk_count"] == 1
-    r = c.post("/documents", headers=H, files={"file": ("b.txt", "한글 cp949 문서 사과 바나나".encode("cp949"), "text/plain")})
-    assert r.status_code == 200
+    assert c.post(f"/chats/{a}/docs", headers=H, files={"file": ("b.txt", "한글 cp949 문서 사과 바나나".encode("cp949"), "text/plain")}).status_code == 200
     from reportlab.pdfgen import canvas
-    b = io.BytesIO(); p = canvas.Canvas(b); p.drawString(72, 720, "retrieval augmented generation pdf test"); p.save()
-    assert c.post("/documents", headers=H, files={"file": ("c.pdf", b.getvalue(), "application/pdf")}).status_code == 200
-    r = c.post("/documents/text", headers=H, json={"title": "붙여넣기 제목", "text": "붙여넣은 글입니다 고양이 강아지"})
-    assert r.status_code == 200
-    storage._invalidate()
-    docs = c.get("/documents", headers=H).json()
-    assert [d["title"] for d in docs][:2] == ["붙여넣기 제목", "c.pdf"] and len(docs) == 4
-    r = c.post("/chat", headers=H, json={"question": "라그는 무엇인가요?"}).json()
-    assert r["sources"][0]["title"] == "a.txt" and "[1]" in r["answer"]
-    assert c.post("/chat", headers=H, json={"question": " "}).status_code == 400
-    doc_id = docs[0]["id"]
-    assert c.delete(f"/documents/{doc_id}", headers=H).json() == {"ok": True}
-    assert c.delete(f"/documents/{doc_id}", headers=H).status_code == 404
-    assert c.delete("/documents/..%2F..%2Fetc", headers=H).status_code in (404, 405)
-    assert len(c.get("/documents", headers=H).json()) == 3
+    buf = io.BytesIO(); p = canvas.Canvas(buf); p.drawString(72, 720, "retrieval augmented generation pdf test"); p.save()
+    assert c.post(f"/chats/{a}/docs", headers=H, files={"file": ("c.pdf", buf.getvalue(), "application/pdf")}).status_code == 200
+    assert up_text(a, "붙여넣기 제목", "붙여넣은 글입니다 고양이 강아지").status_code == 200
+    docs = c.get(f"/chats/{a}/docs", headers=H).json()
+    assert [d["title"] for d in docs] == ["붙여넣기 제목", "c.pdf", "b.txt", "a.txt"]
+    assert c.get(f"/chats/{b}/docs", headers=H).json() == []  # 다른 대화에는 안 보임
+    ra = c.post(f"/chats/{a}/ask", headers=H, json={"question": "라그는 무엇인가요?"}).json()
+    assert ra["sources"][0]["title"] == "a.txt" and "[1]" in ra["answer"]
+    rb = c.post(f"/chats/{b}/ask", headers=H, json={"question": "라그는 무엇인가요?"}).json()
+    assert rb["sources"] == [] and "자료가 없습니다" in rb["answer"]  # B방은 A방 자료로 답하지 않음
+    did = docs[0]["id"]
+    assert c.delete(f"/chats/{a}/docs/{did}", headers=H).json() == {"ok": True}
+    assert c.delete(f"/chats/{a}/docs/{did}", headers=H).status_code == 404
+    assert c.delete(f"/chats/{a}/docs/..%2Fx", headers=H).status_code in (404, 405)
+    assert len(c.get(f"/chats/{a}/docs", headers=H).json()) == 3
+    # 대화를 지우면 그 대화의 자료 파일도 같이 지워짐
+    folder = os.path.join(settings.data_dir, "docs", a)
+    assert os.path.isdir(folder) and os.listdir(folder)
+    c.delete(f"/chats/{a}", headers=H); c.delete(f"/chats/{b}", headers=H)
+    assert not os.path.exists(folder) or not os.listdir(folder)
 
 
 def test_errors():
-    assert c.post("/documents", headers=H, files={"file": ("x.exe", b"zz", "application/octet-stream")}).status_code == 400
-    assert c.post("/documents", headers=H, files={"file": ("y.pdf", b"notpdf", "application/pdf")}).status_code == 400
-    big = "가나다라 " * 100000
-    assert c.post("/documents/text", headers=H, json={"title": "t", "text": big}).status_code == 413
+    g = mk()["id"]
+    assert c.post(f"/chats/{g}/docs", headers=H, files={"file": ("x.exe", b"zz", "application/octet-stream")}).status_code == 400
+    assert c.post(f"/chats/{g}/docs", headers=H, files={"file": ("y.pdf", b"notpdf", "application/pdf")}).status_code == 400
+    assert up_text(g, "t", "가나다라 " * 100000).status_code == 413
+    assert c.post("/chats/gnotexist0000/docs/text", headers=H, json={"title": "t", "text": "x"}).status_code == 404
     d = c.get("/diag", headers=H).json()
     assert d["storage"]["ok"] is True and d["storage"]["backend"] == "local-files"
     assert d["gemini"]["ok"] is False  # 키 없음
+    c.delete(f"/chats/{g}", headers=H)
+
+
+def test_outputs_manage_search_continue():
+    """산출물 탭: 만들기·저장·보기·이름바꾸기·검색·이어서 쓰기·대화로 이어가기·삭제."""
+    g = mk("제주 자료방")["id"]
+    assert c.post(f"/chats/{g}/generate", headers=H, json={"kind": "summary"}).status_code == 400  # 자료 없이 못 만듦
+    up_text(g, "제주도 안내", "제주도 여행에서 흑돼지와 감귤을 꼭 먹어보세요. 렌터카는 미리 예약하세요.")
+    assert c.post(f"/chats/{g}/generate", headers=H, json={"kind": "nope"}).status_code == 400
+    o = c.post(f"/chats/{g}/generate", headers=H, json={"kind": "summary"}).json()
+    assert o["kind"] == "summary" and o["title"].startswith("요약 · ") and o["group_id"] == g
+    ans = c.post(f"/chats/{g}/save-answer", headers=H, json={"title": "먹거리 답변", "text": "렌터카 예약 팁 정리"}).json()
+    assert c.post(f"/chats/{g}/save-answer", headers=H, json={"title": "x", "text": "  "}).status_code == 400
+    lst = c.get("/outputs", headers=H).json()
+    assert {x["id"] for x in lst} == {o["id"], ans["id"]} and all(x["group_title"] == "제주 자료방" for x in lst)
+    one = c.get(f"/outputs/{o['id']}", headers=H).json()
+    assert "흑돼지와 감귤 정리" in one["text"] and one["kind"] == "summary"
+    assert c.patch(f"/outputs/{o['id']}", headers=H, json={"title": "제주 요약본"}).json()["title"] == "제주 요약본"
+    assert c.patch(f"/outputs/{o['id']}", headers=H, json={"title": " "}).status_code == 400
+    # 산출물 검색 (본문·제목), 자료/대화 검색과는 따로
+    s = c.get("/search", headers=H, params={"q": "감귤 정리", "scope": "outputs"}).json()["outputs"]
+    assert [x["id"] for x in s] == [o["id"]] and "감귤" in s[0]["snippet"]
+    assert [x["id"] for x in c.get("/search", headers=H, params={"q": "먹거리", "scope": "outputs"}).json()["outputs"]] == [ans["id"]]
+    assert c.get("/search", headers=H, params={"q": "zzzz없는말", "scope": "outputs"}).json() == {"outputs": []}
+    # ✍ 이어서 쓰기: 기존 글 뒤에 붙음
+    cont = c.post(f"/outputs/{o['id']}/continue", headers=H, json={"instruction": "예시를 더"}).json()
+    assert "흑돼지와 감귤 정리" in cont["text"] and cont["text"].endswith("새로 이어진 내용입니다") and "✍ 이어쓰기" in cont["text"]
+    assert c.get(f"/outputs/{o['id']}", headers=H).json()["text"] == cont["text"]  # 저장됨
+    assert c.post(f"/outputs/{o['id']}/continue", headers=H, json={}).status_code == 200  # 지시 없이도 가능
+    # 💬 대화로 이어가기: 글을 자료로 넣은 새 대화방 → 다시 눌러도 같은 방
+    r1 = c.post(f"/outputs/{o['id']}/open-chat", headers=H).json()
+    r2 = c.post(f"/outputs/{o['id']}/open-chat", headers=H).json()
+    assert r1["created"] is True and r2 == {"group_id": r1["group_id"], "created": False}
+    cg = r1["group_id"]
+    assert [d["title"] for d in c.get(f"/chats/{cg}/docs", headers=H).json()] == ["📦 제주 요약본"]
+    assert c.get(f"/chats/{cg}", headers=H).json()["title"] == "이어가기 · 제주 요약본"
+    assert c.post(f"/chats/{cg}/ask", headers=H, json={"question": "요약 더 알려줘"}).json()["sources"][0]["title"] == "📦 제주 요약본"
+    assert c.get("/chats", headers=H).json()[0]["title"] == "이어가기 · 제주 요약본"  # 직접 지은 제목은 자동으로 안 바뀜
+    # 홈 검색: 대화 제목·채팅·자료
+    h = c.get("/search", headers=H, params={"q": "렌터카"}).json()
+    assert any(d["group_id"] == g for d in h["docs"]) and h["groups"] == []
+    assert any(x["id"] == cg for x in c.get("/search", headers=H, params={"q": "이어가기"}).json()["groups"])
+    assert any(m["group_id"] == cg for m in c.get("/search", headers=H, params={"q": "요약 더"}).json()["chats"])
+    assert c.get("/search", headers=H, params={"q": " "}).json() == {"groups": [], "chats": [], "docs": []}
+    # 대화를 지워도 산출물은 남고 '삭제된 대화'로 표시
+    c.delete(f"/chats/{g}", headers=H)
+    left = {x["id"]: x for x in c.get("/outputs", headers=H).json()}
+    assert left[o["id"]]["group_title"] == "(삭제된 대화)" and left[o["id"]]["group_alive"] is False
+    assert c.delete(f"/outputs/{ans['id']}", headers=H).json() == {"ok": True}
+    assert c.delete(f"/outputs/{ans['id']}", headers=H).status_code == 404
+    assert c.get("/outputs/onotexist", headers=H).status_code == 404
+    c.delete(f"/chats/{cg}", headers=H); c.delete(f"/outputs/{o['id']}", headers=H)
+    assert c.get("/outputs", headers=H).json() == []
 
 
 def test_model_pick():
@@ -125,58 +232,6 @@ def test_gemini_key_popup_api():
     keystore._mem["loaded"] = False  # 다른 서버 인스턴스처럼 저장소에서 다시 읽어도 남아 있어야 함
     assert keystore.get_key().endswith("WXYZ")
     assert c.delete("/settings/gemini", headers=H).json()["source"] == "none"
-
-
-def test_chat_groups_and_search():
-    """채팅 그룹(만들기·이름바꾸기·삭제), 대화 저장, 자료+채팅 통합 검색."""
-    assert c.get("/chats").status_code == 401
-    assert c.get("/search?q=x").status_code == 401
-    groups = c.get("/chats", headers=H).json()
-    assert len(groups) >= 1  # 처음엔 기본 그룹이 자동으로 생김
-    g = c.post("/chats", headers=H, json={"title": "여행 질문"}).json()
-    gid = g["id"]
-    assert c.get(f"/chats/{gid}", headers=H).json()["messages"] == []
-    assert c.get("/chats/gnotexist0000", headers=H).status_code == 404
-    assert c.get("/chats/../x", headers=H).status_code in (404, 405)
-
-    up = c.post("/documents/text", headers=H, json={"title": "제주도 안내", "text": "제주도 여행에서 흑돼지와 감귤을 꼭 먹어보세요. 렌터카는 미리 예약하세요."}).json()
-    r = c.post(f"/chats/{gid}/ask", headers=H, json={"question": "제주도에서 뭘 먹을까?"})
-    assert r.status_code == 200 and r.json()["answer"]
-    msgs = c.get(f"/chats/{gid}", headers=H).json()["messages"]
-    assert [m["role"] for m in msgs] == ["user", "assistant"] and msgs[0]["text"] == "제주도에서 뭘 먹을까?"
-    assert any(x["id"] == gid and x["title"] == "여행 질문" for x in c.get("/chats", headers=H).json())
-
-    # 다른 그룹의 대화는 섞이지 않음
-    g2 = c.post("/chats", headers=H, json={"title": "다른 방"}).json()
-    assert c.get(f"/chats/{g2['id']}", headers=H).json()["messages"] == []
-    c.post(f"/chats/{g2['id']}/ask", headers=H, json={"question": "렌터카 예약은?"})
-    assert c.get(f"/chats/{g2['id']}", headers=H).json()["messages"][0]["text"] == "렌터카 예약은?"
-    assert len(c.get(f"/chats/{gid}", headers=H).json()["messages"]) == 2
-
-    # 검색: 자료 본문, 자료 제목, 채팅 기록, 여러 단어(AND), 없는 말
-    s1 = c.get("/search", headers=H, params={"q": "흑돼지"}).json()
-    assert any("흑돼지" in sn for d in s1["docs"] for sn in d["snippets"])
-    assert any(h["group_id"] == gid for h in s1["chats"]) is False  # 질문엔 '흑돼지'가 없음
-    s2 = c.get("/search", headers=H, params={"q": "제주도 안내"}).json()
-    assert any(d["title_hit"] for d in s2["docs"])
-    s3 = c.get("/search", headers=H, params={"q": "렌터카"}).json()
-    assert any(h["group_id"] == g2["id"] and h["role"] == "user" for h in s3["chats"])
-    s4 = c.get("/search", headers=H, params={"q": "제주도 먹을까"}).json()
-    assert any(h["group_id"] == gid for h in s4["chats"])
-    assert c.get("/search", headers=H, params={"q": "zzzz없는말"}).json() == {"docs": [], "chats": []}
-    assert c.get("/search", headers=H, params={"q": "  "}).json() == {"docs": [], "chats": []}
-
-    # 이름 바꾸기, 삭제
-    assert c.patch(f"/chats/{gid}", headers=H, json={"title": "제주 여행"}).json()["title"] == "제주 여행"
-    assert c.patch(f"/chats/{gid}", headers=H, json={"title": " "}).status_code == 400
-    assert c.delete(f"/chats/{gid}", headers=H).status_code == 200
-    assert all(x["id"] != gid for x in c.get("/chats", headers=H).json())
-    assert c.get(f"/chats/{gid}", headers=H).status_code == 404
-    for x in c.get("/chats", headers=H).json():  # 전부 지워도 빈 기본 그룹이 남음
-        c.delete(f"/chats/{x['id']}", headers=H)
-    left = c.get("/chats", headers=H).json()
-    assert len(left) == 1 and left[0]["title"] == "기본 대화"
-    c.delete(f"/documents/{up['id']}", headers=H)
 
 
 if __name__ == "__main__":

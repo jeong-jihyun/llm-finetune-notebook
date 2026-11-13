@@ -5,16 +5,15 @@ from fastapi.responses import FileResponse
 
 from app import storage
 from app.auth import require_password
-from app.routers import chat, chats, documents, settings
+from app.routers import chats, outputs, settings
 from app.services import llm
 
 app = FastAPI(title="llm-finetune-notebook API")
 
-app.include_router(documents.router)
 app.include_router(settings.router)
 app.include_router(chats.router)
 app.include_router(chats.search_router)
-app.include_router(chat.router)
+app.include_router(outputs.router)
 
 PUBLIC = Path(__file__).resolve().parent.parent / "public"
 
