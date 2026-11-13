@@ -28,6 +28,12 @@
   .ask { position:sticky; bottom:0; display:flex; gap:8px; background:var(--bg); padding:10px 0; }
   input[type=text], input[type=password], textarea { width:100%; padding:12px; border:1px solid var(--line); border-radius:10px; font-size:16px; font-family:inherit; }
   .ask input { flex:1; }
+  #drop { display:block; border:2px dashed var(--line); border-radius:12px; padding:22px 12px; text-align:center; cursor:pointer; background:#fafbfc; }
+  #drop.over { border-color:var(--main); background:#e8eefc; }
+  .qi { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .qi .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .qi .st { font-size:12px; color:var(--sub); text-align:right; max-width:50%; }
+  .qi .st.err { color:#c0392b; } .qi .st.ok { color:#1e8e3e; }
   #status, #diag { font-size:13px; margin:8px 0; white-space:pre-wrap; }
   .err { color:#c0392b; } .ok { color:#1e8e3e; }
   #login { position:fixed; inset:0; background:rgba(20,24,35,.55); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
@@ -59,9 +65,12 @@
     <section id="docs" class="on">
       <h2>자료함</h2>
       <div class="card">
-        <input id="file" type="file" accept=".txt,.md,.pdf" multiple>
-        <div style="margin-top:10px"><button class="btn" id="upBtn" onclick="upload()">파일 올리기</button></div>
-        <div id="status" class="sub">txt, md, pdf (파일당 4MB까지, 자료 1개당 글 약 32만 자까지)</div>
+        <label id="drop" for="file">📄 여기를 눌러 파일을 고르세요 (여러 개 가능)<br><span class="sub">PC에서는 파일을 끌어다 놓아도 돼요</span></label>
+        <input id="file" type="file" accept=".txt,.md,.pdf" multiple hidden>
+        <div id="queue"></div>
+        <div style="margin-top:10px"><button class="btn" id="upBtn" onclick="upload()" disabled>파일 올리기</button>
+          <button class="ghost" id="clrBtn" onclick="clearQueue()" style="display:none">목록 비우기</button></div>
+        <div id="status" class="sub">txt, md, pdf (파일당 4MB까지, 자료 1개당 글 약 32만 자까지). 고른 파일은 목록에 쌓여요.</div>
       </div>
       <details class="card">
         <summary>글 직접 붙여넣기</summary>
@@ -106,7 +115,7 @@ async function api(path, opts){
   const r = await fetch(path, opts);
   const data = await r.json().catch(()=>({}));
   if (r.status === 401) { askPw(getPw() ? '비밀번호가 맞지 않아요.' : ''); throw new Error('비밀번호가 필요합니다'); }
-  if (!r.ok) throw new Error(data.detail || ('오류 '+r.status));
+  if (!r.ok) { const e = new Error(data.detail || ('오류 '+r.status)); e.status = r.status; throw e; }
   return data;
 }
 async function load(){
@@ -119,19 +128,68 @@ async function load(){
       : '<div class="sub">아직 올린 자료가 없어요.</div>';
   } catch(e) { $('list').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; }
 }
-async function upload(){
-  const files = $('file').files;
-  if (!files.length) { $('status').innerHTML = '<span class="err">파일을 먼저 선택해 주세요.</span>'; return; }
-  $('upBtn').disabled = true;
-  for (const f of files) {
-    $('status').textContent = f.name + ' 처리 중… (글 추출 → 조각내기 → 임베딩, 길면 1분 정도 걸려요)';
-    const fd = new FormData(); fd.append('file', f);
-    try { await api('/documents', {method:'POST', body: fd}); }
-    catch(e) { $('status').innerHTML = '<span class="err">'+esc(f.name)+': '+esc(e.message)+'</span>'; $('upBtn').disabled = false; return; }
+// ---- 여러 파일 올리기: 목록에 쌓고, 하나씩 순서대로, 실패해도 나머지는 계속 ----
+const MAX_MB = 4, OK_EXT = /\.(txt|md|pdf)$/i;
+let Q = [], running = false;   // Q: {file, state:'wait|run|ok|err', msg}
+function addFiles(list){
+  for (const f of list) {
+    if (Q.some(x => x.file.name === f.name && x.file.size === f.size && x.state !== 'ok')) continue;
+    const it = {file: f, state: 'wait', msg: '대기'};
+    if (!OK_EXT.test(f.name)) { it.state = 'err'; it.msg = 'txt, md, pdf만 가능'; }
+    else if (f.size > MAX_MB*1024*1024) { it.state = 'err'; it.msg = MAX_MB+'MB 초과'; }
+    Q.push(it);
   }
-  $('status').textContent = '완료! 채팅 탭에서 질문해 보세요.';
-  $('file').value = ''; $('upBtn').disabled = false; load();
+  renderQ();
 }
+function renderQ(){
+  const mark = {wait:'⏳', run:'🔄', ok:'✅', err:'❌'};
+  $('queue').innerHTML = Q.map((it,i) => `<div class="qi"><span class="nm">${mark[it.state]} ${esc(it.file.name)}</span>
+    <span class="st ${it.state}">${esc(it.msg)}</span>
+    ${running ? '' : `<button class="ghost" onclick="rmQ(${i})">✕</button>`}</div>`).join('');
+  const n = Q.filter(x => x.state==='wait').length;
+  $('upBtn').disabled = running || n===0;
+  $('upBtn').textContent = n ? n+'개 올리기' : '파일 올리기';
+  $('clrBtn').style.display = Q.length && !running ? '' : 'none';
+}
+function rmQ(i){ if (!running) { Q.splice(i,1); renderQ(); } }
+function clearQueue(){ if (!running) { Q = []; renderQ(); $('status').textContent = ''; } }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function sendOne(it){
+  for (let t = 0; t < 2; t++) {
+    const fd = new FormData(); fd.append('file', it.file);
+    try { return await api('/documents', {method:'POST', body: fd}); }
+    catch(e) {
+      if (e.status === 429 && t === 0) {            // 무료 한도: 한 번만 20초 쉬고 재시도
+        for (let s = 20; s > 0; s--) { it.msg = '한도 대기 '+s+'초 후 재시도'; renderQ(); await sleep(1000); }
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+async function upload(){
+  if (running) return;
+  running = true; let ok = 0, fail = 0;
+  const todo = Q.filter(x => x.state === 'wait');
+  for (let k = 0; k < todo.length; k++) {
+    const it = todo[k];
+    it.state = 'run'; it.msg = '처리 중…'; renderQ();
+    $('status').textContent = `${k+1}/${todo.length} · ${it.file.name} (글 추출 → 조각내기 → 임베딩, 길면 1분쯤 걸려요)`;
+    try { const r = await sendOne(it); it.state = 'ok'; it.msg = '조각 '+r.chunk_count+'개'; ok++; }
+    catch(e) {
+      it.state = 'err'; it.msg = e.message; fail++;
+      if (e.message === '비밀번호가 필요합니다') { for (const x of todo.slice(k+1)) { x.state='wait'; x.msg='대기'; } break; }
+    }
+    renderQ();
+  }
+  running = false; renderQ();
+  $('status').innerHTML = `<span class="${fail ? 'err' : 'ok'}">완료 ${ok}개${fail ? ' · 실패 '+fail+'개 (위 목록의 빨간 글씨 확인)' : ''}.</span> 채팅 탭에서 질문해 보세요.`;
+  load();
+}
+$('file').addEventListener('change', e => { addFiles(e.target.files); e.target.value = ''; });
+['dragenter','dragover'].forEach(ev => $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('over'); }));
+['dragleave','drop'].forEach(ev => $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('over'); }));
+$('drop').addEventListener('drop', e => addFiles(e.dataTransfer.files));
 async function pasteText(){
   const text = $('ptext').value.trim(); if (!text) return;
   $('pasteBtn').disabled = true; $('status').textContent = '처리 중…';
