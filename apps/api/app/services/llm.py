@@ -12,6 +12,9 @@ from app.services import keystore
 BASE = "https://generativelanguage.googleapis.com/v1beta"
 _BAD = ("preview", "tts", "image", "live", "audio", "thinking", "exp", "robotics", "nano", "vision", "computer", "latest")
 _cache: dict = {}
+_bad_until: dict[str, float] = {}  # 과부하(503)·시간 초과가 난 모델은 잠시 건너뜀
+_last_ok: list[str] = []  # 마지막으로 성공한 모델을 먼저 씀
+COOLDOWN = 600
 
 
 def _headers() -> dict:
@@ -86,7 +89,7 @@ def pick_embed_models(models: list[dict]) -> list[str]:
 def chat_model() -> list[str]:
     if settings.gemini_chat_model:
         return [settings.gemini_chat_model]
-    return pick_chat_models(list_models())[:3] or ["gemini-flash-latest"]
+    return pick_chat_models(list_models())[:5] or ["gemini-flash-latest"]
 
 
 def embed_model() -> str:
@@ -133,7 +136,11 @@ def complete(system: str, user: str) -> str:
     }
     last: HTTPException | None = None
     deadline = time.monotonic() + 48  # Vercel 함수 제한(60초) 안에서 끝내기
-    for model in chat_model():
+    models = chat_model()
+    now = time.monotonic()
+    ready = [m for m in models if _bad_until.get(m, 0) <= now] or models  # 전부 쉬는 중이면 다 시도
+    ready.sort(key=lambda m: 0 if m in _last_ok else 1)
+    for model in ready:
         left = deadline - time.monotonic()
         if left < 8:
             break
@@ -142,8 +149,11 @@ def complete(system: str, user: str) -> str:
         except HTTPException as e:
             if e.status_code == 429:
                 raise
-            last = e  # 이 모델이 안 되면(시간 초과 포함) 다음 후보로
+            last = e  # 이 모델이 안 되면(과부하·시간 초과 포함) 다음 후보로
+            _bad_until[model] = time.monotonic() + COOLDOWN
             continue
+        _last_ok[:] = [model]
+        _bad_until.pop(model, None)
         parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
         return "".join(p.get("text", "") for p in parts) or "답변을 만들지 못했습니다."
     raise last or HTTPException(502, "Gemini 답변 생성에 실패했습니다")

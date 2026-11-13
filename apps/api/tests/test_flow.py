@@ -277,6 +277,31 @@ def test_gemini_timeout_is_friendly_not_500():
         llm._send, llm.chat_model, llm._headers = saved
 
 
+def test_overloaded_model_is_skipped_next_time():
+    """503으로 막힌 최신 모델은 다음 질문에서 건너뛰고, 성공한 모델을 먼저 쓴다."""
+    from fastapi import HTTPException
+
+    saved = (llm._send, llm.chat_model)
+    llm.chat_model = lambda: ["new-3.8", "mid-3.7", "ok-3.6"]
+    llm._bad_until.clear(); llm._last_ok.clear()
+    calls = []
+
+    def fake_send(method, path, json=None, timeout=40):
+        calls.append(path.split("/")[1].split(":")[0])
+        if "ok-3.6" not in path:
+            raise HTTPException(502, "Gemini 오류 503")
+        return {"candidates": [{"content": {"parts": [{"text": "OK"}]}}]}
+
+    llm._send = fake_send
+    try:
+        assert REAL_COMPLETE("s", "u") == "OK" and calls == ["new-3.8", "mid-3.7", "ok-3.6"]
+        calls.clear()
+        assert REAL_COMPLETE("s", "u") == "OK" and calls == ["ok-3.6"]  # 막힌 모델은 건너뜀
+    finally:
+        llm._send, llm.chat_model = saved
+        llm._bad_until.clear(); llm._last_ok.clear()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
