@@ -15,12 +15,12 @@
 [웹/모바일(Next.js PWA)]
         │ HTTPS
         ▼
-[FastAPI] ──► Supabase(Auth·Storage·Postgres+pgvector)
+[FastAPI] ──► Vercel Blob(자료·임베딩 저장)
    │  ├─ /documents  업로드·처리
    │  ├─ /chat       RAG 질의응답 (학습 모델 있으면 그 모델 사용)
    │  └─ /finetune   학습 데이터 생성·학습 작업 시작·상태 조회
    ▼
-[외부 파인튜닝 API]  (기본: OpenAI, 교체 가능)
+[Gemini 무료 API]  (임베딩·답변) / 2단계: 무료 파인튜닝 방법 조사 중
 ```
 
 ## 4. 데이터 흐름
