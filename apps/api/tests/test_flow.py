@@ -127,6 +127,58 @@ def test_gemini_key_popup_api():
     assert c.delete("/settings/gemini", headers=H).json()["source"] == "none"
 
 
+def test_chat_groups_and_search():
+    """채팅 그룹(만들기·이름바꾸기·삭제), 대화 저장, 자료+채팅 통합 검색."""
+    assert c.get("/chats").status_code == 401
+    assert c.get("/search?q=x").status_code == 401
+    groups = c.get("/chats", headers=H).json()
+    assert len(groups) >= 1  # 처음엔 기본 그룹이 자동으로 생김
+    g = c.post("/chats", headers=H, json={"title": "여행 질문"}).json()
+    gid = g["id"]
+    assert c.get(f"/chats/{gid}", headers=H).json()["messages"] == []
+    assert c.get("/chats/gnotexist0000", headers=H).status_code == 404
+    assert c.get("/chats/../x", headers=H).status_code in (404, 405)
+
+    up = c.post("/documents/text", headers=H, json={"title": "제주도 안내", "text": "제주도 여행에서 흑돼지와 감귤을 꼭 먹어보세요. 렌터카는 미리 예약하세요."}).json()
+    r = c.post(f"/chats/{gid}/ask", headers=H, json={"question": "제주도에서 뭘 먹을까?"})
+    assert r.status_code == 200 and r.json()["answer"]
+    msgs = c.get(f"/chats/{gid}", headers=H).json()["messages"]
+    assert [m["role"] for m in msgs] == ["user", "assistant"] and msgs[0]["text"] == "제주도에서 뭘 먹을까?"
+    assert any(x["id"] == gid and x["title"] == "여행 질문" for x in c.get("/chats", headers=H).json())
+
+    # 다른 그룹의 대화는 섞이지 않음
+    g2 = c.post("/chats", headers=H, json={"title": "다른 방"}).json()
+    assert c.get(f"/chats/{g2['id']}", headers=H).json()["messages"] == []
+    c.post(f"/chats/{g2['id']}/ask", headers=H, json={"question": "렌터카 예약은?"})
+    assert c.get(f"/chats/{g2['id']}", headers=H).json()["messages"][0]["text"] == "렌터카 예약은?"
+    assert len(c.get(f"/chats/{gid}", headers=H).json()["messages"]) == 2
+
+    # 검색: 자료 본문, 자료 제목, 채팅 기록, 여러 단어(AND), 없는 말
+    s1 = c.get("/search", headers=H, params={"q": "흑돼지"}).json()
+    assert any("흑돼지" in sn for d in s1["docs"] for sn in d["snippets"])
+    assert any(h["group_id"] == gid for h in s1["chats"]) is False  # 질문엔 '흑돼지'가 없음
+    s2 = c.get("/search", headers=H, params={"q": "제주도 안내"}).json()
+    assert any(d["title_hit"] for d in s2["docs"])
+    s3 = c.get("/search", headers=H, params={"q": "렌터카"}).json()
+    assert any(h["group_id"] == g2["id"] and h["role"] == "user" for h in s3["chats"])
+    s4 = c.get("/search", headers=H, params={"q": "제주도 먹을까"}).json()
+    assert any(h["group_id"] == gid for h in s4["chats"])
+    assert c.get("/search", headers=H, params={"q": "zzzz없는말"}).json() == {"docs": [], "chats": []}
+    assert c.get("/search", headers=H, params={"q": "  "}).json() == {"docs": [], "chats": []}
+
+    # 이름 바꾸기, 삭제
+    assert c.patch(f"/chats/{gid}", headers=H, json={"title": "제주 여행"}).json()["title"] == "제주 여행"
+    assert c.patch(f"/chats/{gid}", headers=H, json={"title": " "}).status_code == 400
+    assert c.delete(f"/chats/{gid}", headers=H).status_code == 200
+    assert all(x["id"] != gid for x in c.get("/chats", headers=H).json())
+    assert c.get(f"/chats/{gid}", headers=H).status_code == 404
+    for x in c.get("/chats", headers=H).json():  # 전부 지워도 빈 기본 그룹이 남음
+        c.delete(f"/chats/{x['id']}", headers=H)
+    left = c.get("/chats", headers=H).json()
+    assert len(left) == 1 and left[0]["title"] == "기본 대화"
+    c.delete(f"/documents/{up['id']}", headers=H)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
