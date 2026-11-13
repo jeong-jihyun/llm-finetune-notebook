@@ -60,10 +60,10 @@
 | GET | /models | 내 모델 목록 |
 
 ## 7. DB
-`supabase/migrations/0001_init.sql` 참고. 핵심 테이블: `documents`, `chunks`, `training_examples`, `finetune_jobs`, `models`, `messages`. 모든 테이블에 `user_id`와 RLS(본인 것만 접근) 적용.
+현재(1단계)는 DB 없이 **Vercel Blob(비공개)** 에 자료 1개당 파일 1개(`docs/<id>__<조각수>__<제목>.json`: 조각 글 + 임베딩)로 저장하고, 검색은 서버에서 코사인 유사도로 계산합니다. 사용자가 늘면 Postgres(pgvector)로 옮깁니다.
 
 ## 8. 외부 파인튜닝 API 연결
-`apps/api/app/finetune/base.py`의 `FineTuneProvider` 인터페이스(`upload_dataset`, `start_job`, `get_job`)를 구현한 공급자를 환경변수 `FINETUNE_PROVIDER`로 선택한다. 기본 구현은 OpenAI(`openai_provider.py`). 기본 모델 이름은 `FINETUNE_BASE_MODEL`로 지정하며, **파인튜닝이 지원되는 모델인지 공급자 문서에서 확인 후 사용**한다.
+2단계는 **무료로 가능한 방법을 조사한 뒤** 결정합니다(OpenAI 파인튜닝은 유료라 제외). 공급자를 바꿔 끼울 수 있는 인터페이스로 분리할 예정입니다.
 
 ## 9. 위험과 대응
 - 자료가 적으면 학습해도 사실을 잘 못 외움 → 사실 질문은 RAG, 학습 모델은 말투·용어·형식에 활용

@@ -7,35 +7,39 @@
 | 단계 | 하는 일 | 걸리는 시간 |
 |---|---|---|
 | 1단계 즉시 사용 | 업로드 → 글 추출 → 조각내기 → 벡터 저장 → 출처 포함 답변 (RAG) | 수 초~수 분 |
-| 2단계 깊게 학습 | 자료로 Q&A 학습데이터 자동 생성 → 외부 파인튜닝 API로 학습 → 내 모델로 교체 | 수 분~수 시간 |
+| 2단계 깊게 학습 | 자료로 Q&A 학습데이터 자동 생성 → 파인튜닝 → 내 모델로 교체 (무료 방법 조사 중) | 수 분~수 시간 |
 
 > 노트북LM은 "학습"이 아니라 "검색해서 답하기"입니다. 사실 질문은 RAG, 말투·전문용어는 파인튜닝이 맡도록 역할을 나눕니다.
 
-## 구조
+## 구조 (전부 Vercel 안에서, 무료)
 
 ```
-apps/web    Next.js(반응형 + PWA)  → Vercel 배포
-apps/api    FastAPI                → 업로드·RAG·학습 작업 관리
-supabase/   DB 스키마(pgvector)·로그인·파일 저장
-docs/       설계 문서
+apps/api/public/index.html  반응형 화면 (자료함 · 채팅 · 점검, 폰/PC 같은 화면)
+apps/api/app                FastAPI: 업로드·검색·답변
+저장소                      Vercel Blob (비공개)  ← Supabase 안 씀
+AI                          Google Gemini API 무료 등급 (임베딩 + 답변)
 ```
 
-## 시작하기 (Windows PowerShell)
+- 이 주소를 아는 누구나 내 무료 사용량을 쓰지 못하게 **비밀번호(APP_PASSWORD)** 로 막습니다.
+- Gemini 무료 등급은 사용 횟수 제한이 있고, 입력 내용이 Google 서비스 개선에 쓰일 수 있으니 민감한 자료는 올리지 마세요.
+- 자료 1개당 글 약 32만 자(조각 400개), 파일 4MB까지 (Vercel 요청 크기 한도).
+
+## 내 PC에서 시험 (선택, Windows PowerShell)
 
 ```powershell
 cd apps\api
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1      # 오류 나면: Set-ExecutionPolicy -Scope Process Bypass
 pip install -r requirements.txt
-Copy-Item ..\..\.env.example .env   # apps\api\.env 에 OPENAI_API_KEY 입력
+Copy-Item ..\..\.env.example .env   # .env 에 GEMINI_API_KEY, APP_PASSWORD 입력
 uvicorn app.main:app --reload --port 8000
 ```
+http://localhost:8000 (Blob 토큰이 없으면 `apps/api/data`에 저장) · 테스트: `python tests/test_flow.py`
 
-브라우저에서 http://localhost:8000 → **자료함**에서 txt/md/pdf 올리기 → **채팅**에서 질문.
-(같은 와이파이의 폰에서는 `uvicorn ... --host 0.0.0.0` 로 켜고 `http://PC주소:8000` 접속)
+## Vercel 배포
+Vercel 프로젝트의 Root Directory를 `apps/api`로 두고, 환경변수 `GEMINI_API_KEY`·`APP_PASSWORD`를 넣고, Blob 저장소를 프로젝트에 연결합니다. 화면의 **점검** 탭에서 저장소·Gemini 연결을 확인할 수 있습니다.
 
-> 1단계는 시험하기 쉽게 로컬 SQLite 저장 + 서버가 직접 보여주는 반응형 화면입니다.
-> Supabase(pgvector)·Next.js로 바꾸는 것은 이후 단계입니다. 자료는 `apps/api/data/`에 저장됩니다(git 제외).
+> 2단계(학습 데이터 생성·파인튜닝)는 무료로 가능한 방법을 조사한 뒤 진행합니다.
 
 ## 개발 순서
 

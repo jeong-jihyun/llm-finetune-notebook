@@ -1,4 +1,4 @@
-from app import store
+from app import storage
 from app.config import settings
 from app.services import llm
 
@@ -9,13 +9,14 @@ SYSTEM = (
 )
 
 
-def answer(question: str, model: str | None = None) -> dict:
-    q_emb = llm.embed([question])[0]
-    hits = store.search(q_emb, settings.top_k)
-    if not hits:
+def answer(question: str) -> dict:
+    if not storage.list_documents():
         return {"answer": "아직 올린 자료가 없습니다. 먼저 자료함에서 파일을 올려 주세요.", "sources": []}
+    hits = storage.search(llm.embed([question])[0], settings.top_k)
+    if not hits:
+        return {"answer": "관련 자료를 찾지 못했습니다. 자료를 다시 올려 보세요.", "sources": []}
     context = "\n\n".join(f"[{i + 1}] ({h['title']})\n{h['content']}" for i, h in enumerate(hits))
-    text = llm.complete(SYSTEM, f"[자료]\n{context}\n\n[질문]\n{question}", model)
+    text = llm.complete(SYSTEM, f"[자료]\n{context}\n\n[질문]\n{question}")
     sources = [
         {"n": i + 1, "title": h["title"], "snippet": h["content"][:200], "score": round(h["score"], 3)}
         for i, h in enumerate(hits)

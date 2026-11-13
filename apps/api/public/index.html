@@ -26,9 +26,12 @@
   .chip { display:inline-block; font-size:12px; border:1px solid var(--line); border-radius:999px; padding:2px 10px; margin:6px 6px 0 0; cursor:pointer; color:var(--main); background:#fff; }
   .snip { font-size:13px; color:var(--sub); border-left:3px solid var(--line); padding-left:8px; margin-top:6px; display:none; }
   .ask { position:sticky; bottom:0; display:flex; gap:8px; background:var(--bg); padding:10px 0; }
-  .ask input { flex:1; padding:12px; border:1px solid var(--line); border-radius:10px; font-size:16px; }
-  #status { font-size:13px; margin:8px 0; }
-  .err { color:#c0392b; }
+  input[type=text], input[type=password], textarea { width:100%; padding:12px; border:1px solid var(--line); border-radius:10px; font-size:16px; font-family:inherit; }
+  .ask input { flex:1; }
+  #status, #diag { font-size:13px; margin:8px 0; white-space:pre-wrap; }
+  .err { color:#c0392b; } .ok { color:#1e8e3e; }
+  #login { position:fixed; inset:0; background:rgba(20,24,35,.55); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  #login .box { background:#fff; border-radius:14px; padding:20px; width:100%; max-width:340px; }
   @media (max-width: 720px) {
     .app { flex-direction:column-reverse; }
     nav { position:fixed; bottom:0; left:0; right:0; width:100%; flex-direction:row; border-right:0; border-top:1px solid var(--line); padding:6px; z-index:10; }
@@ -39,51 +42,80 @@
 </style>
 </head>
 <body>
+<div id="login"><div class="box">
+  <h3 style="margin-top:0">비밀번호를 입력하세요</h3>
+  <input id="pw" type="password" placeholder="비밀번호" onkeydown="if(event.key==='Enter')savePw()">
+  <div id="pwerr" class="err sub"></div>
+  <div style="margin-top:12px"><button class="btn" onclick="savePw()">들어가기</button></div>
+</div></div>
 <div class="app">
   <nav>
     <h1>📚 자료 노트북</h1>
     <button id="t-docs" class="on" onclick="show('docs')">자료함</button>
     <button id="t-chat" onclick="show('chat')">채팅</button>
+    <button id="t-sys" onclick="show('sys')">점검</button>
   </nav>
   <main>
     <section id="docs" class="on">
       <h2>자료함</h2>
       <div class="card">
         <input id="file" type="file" accept=".txt,.md,.pdf" multiple>
-        <div style="margin-top:10px"><button class="btn" id="upBtn" onclick="upload()">올리기</button></div>
-        <div id="status" class="sub">txt, md, pdf 파일 (파일당 10MB까지)</div>
+        <div style="margin-top:10px"><button class="btn" id="upBtn" onclick="upload()">파일 올리기</button></div>
+        <div id="status" class="sub">txt, md, pdf (파일당 4MB까지, 자료 1개당 글 약 32만 자까지)</div>
       </div>
+      <details class="card">
+        <summary>글 직접 붙여넣기</summary>
+        <div style="margin-top:10px"><input id="ptitle" type="text" placeholder="제목"></div>
+        <div style="margin-top:8px"><textarea id="ptext" rows="6" placeholder="여기에 글을 붙여넣으세요"></textarea></div>
+        <div style="margin-top:10px"><button class="btn" id="pasteBtn" onclick="pasteText()">올리기</button></div>
+      </details>
       <div id="list"></div>
     </section>
     <section id="chat">
       <h2>채팅</h2>
       <div id="log"><div class="sub">올린 자료를 바탕으로 질문해 보세요.</div></div>
       <div class="ask">
-        <input id="q" placeholder="질문을 입력하세요" onkeydown="if(event.key==='Enter')send()">
+        <input id="q" type="text" placeholder="질문을 입력하세요" onkeydown="if(event.key==='Enter')send()">
         <button class="btn" id="sendBtn" onclick="send()">보내기</button>
+      </div>
+    </section>
+    <section id="sys">
+      <h2>시스템 점검</h2>
+      <div class="card">
+        <div class="sub">저장소와 Gemini(무료 AI) 연결 상태를 확인해요.</div>
+        <div style="margin-top:10px"><button class="btn" onclick="runDiag()">점검하기</button></div>
+        <div id="diag"></div>
       </div>
     </section>
   </main>
 </div>
 <script>
 const $ = id => document.getElementById(id);
+const TABS = ['docs','chat','sys'];
 function show(name){
-  for (const n of ['docs','chat']) { $(n).classList.toggle('on', n===name); $('t-'+n).classList.toggle('on', n===name); }
+  for (const n of TABS) { $(n).classList.toggle('on', n===name); $('t-'+n).classList.toggle('on', n===name); }
   if (name==='docs') load();
 }
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function getPw(){ try { return localStorage.getItem('pw') || ''; } catch(e) { return window._pw || ''; } }
+function setPw(v){ try { localStorage.setItem('pw', v); } catch(e) { window._pw = v; } }
+function askPw(msg){ $('pwerr').textContent = msg || ''; $('login').style.display = 'flex'; $('pw').focus(); }
+function savePw(){ const v = $('pw').value.trim(); if (!v) return; setPw(v); $('pw').value=''; $('login').style.display='none'; load(); }
 async function api(path, opts){
+  opts = opts || {}; opts.headers = Object.assign({}, opts.headers, {'X-App-Password': getPw()});
   const r = await fetch(path, opts);
   const data = await r.json().catch(()=>({}));
+  if (r.status === 401) { askPw(getPw() ? '비밀번호가 맞지 않아요.' : ''); throw new Error('비밀번호가 필요합니다'); }
   if (!r.ok) throw new Error(data.detail || ('오류 '+r.status));
   return data;
 }
 async function load(){
+  if (!getPw()) { askPw(''); return; }
   try {
     const docs = await api('/documents');
     $('list').innerHTML = docs.length ? docs.map(d => `
       <div class="card row"><div><b>${esc(d.title)}</b><div class="sub">조각 ${d.chunk_count}개 · ${esc(d.created_at)}</div></div>
-      <button class="ghost" onclick="del(${d.id})">삭제</button></div>`).join('')
+      <button class="ghost" onclick="del('${esc(d.id)}')">삭제</button></div>`).join('')
       : '<div class="sub">아직 올린 자료가 없어요.</div>';
   } catch(e) { $('list').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; }
 }
@@ -92,7 +124,7 @@ async function upload(){
   if (!files.length) { $('status').innerHTML = '<span class="err">파일을 먼저 선택해 주세요.</span>'; return; }
   $('upBtn').disabled = true;
   for (const f of files) {
-    $('status').textContent = f.name + ' 처리 중… (글 추출 → 조각내기 → 임베딩)';
+    $('status').textContent = f.name + ' 처리 중… (글 추출 → 조각내기 → 임베딩, 길면 1분 정도 걸려요)';
     const fd = new FormData(); fd.append('file', f);
     try { await api('/documents', {method:'POST', body: fd}); }
     catch(e) { $('status').innerHTML = '<span class="err">'+esc(f.name)+': '+esc(e.message)+'</span>'; $('upBtn').disabled = false; return; }
@@ -100,7 +132,16 @@ async function upload(){
   $('status').textContent = '완료! 채팅 탭에서 질문해 보세요.';
   $('file').value = ''; $('upBtn').disabled = false; load();
 }
-async function del(id){ if (confirm('이 자료를 삭제할까요?')) { await api('/documents/'+id, {method:'DELETE'}); load(); } }
+async function pasteText(){
+  const text = $('ptext').value.trim(); if (!text) return;
+  $('pasteBtn').disabled = true; $('status').textContent = '처리 중…';
+  try {
+    await api('/documents/text', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title: $('ptitle').value, text})});
+    $('ptext').value=''; $('ptitle').value=''; $('status').textContent = '완료! 채팅 탭에서 질문해 보세요.'; load();
+  } catch(e) { $('status').innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
+  $('pasteBtn').disabled = false;
+}
+async function del(id){ if (confirm('이 자료를 삭제할까요?')) { try { await api('/documents/'+id, {method:'DELETE'}); } catch(e) { alert(e.message); } load(); } }
 async function send(){
   const q = $('q').value.trim(); if (!q) return;
   $('q').value = ''; $('sendBtn').disabled = true;
@@ -118,6 +159,16 @@ async function send(){
   $('sendBtn').disabled = false; holder.scrollIntoView({block:'end'});
 }
 function toggle(id){ const e = $(id); e.style.display = e.style.display==='block' ? 'none' : 'block'; }
+async function runDiag(){
+  $('diag').textContent = '확인 중…';
+  try {
+    const r = await api('/diag');
+    const s = r.storage, g = r.gemini;
+    $('diag').innerHTML =
+      `<div class="${s.ok?'ok':'err'}">저장소(${esc(s.backend)}): ${s.ok?'정상':'문제 - '+esc(s.error||'')}</div>` +
+      `<div class="${g.ok?'ok':'err'}">Gemini: ${g.ok ? '정상 · 답변 모델 '+esc((g.chat_models||[]).join(', '))+' · 임베딩 모델 '+esc(g.embed_model) : '문제 - '+esc(g.error||'')}</div>`;
+  } catch(e) { $('diag').innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
+}
 load();
 </script>
 </body>

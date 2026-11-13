@@ -1,14 +1,14 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.auth import require_password
 from app.services import rag
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+router = APIRouter(prefix="/chat", tags=["chat"], dependencies=[Depends(require_password)])
 
 
 class ChatIn(BaseModel):
     question: str
-    model: str | None = None  # 2단계: 학습된 모델 ID
 
 
 @router.post("")
@@ -16,4 +16,4 @@ def chat(body: ChatIn):
     q = body.question.strip()
     if not q:
         raise HTTPException(400, "질문을 입력해 주세요")
-    return rag.answer(q, body.model)
+    return rag.answer(q)
