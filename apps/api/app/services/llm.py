@@ -6,6 +6,7 @@ import httpx
 from fastapi import HTTPException
 
 from app.config import settings
+from app.services import keystore
 
 BASE = "https://generativelanguage.googleapis.com/v1beta"
 _BAD = ("preview", "tts", "image", "live", "audio", "thinking", "exp", "robotics", "nano", "vision", "computer", "latest")
@@ -13,9 +14,10 @@ _cache: dict = {}
 
 
 def _headers() -> dict:
-    if not settings.gemini_api_key:
-        raise HTTPException(400, "GEMINI_API_KEY가 없습니다. Vercel 환경변수(또는 apps/api/.env)에 무료 키를 넣어 주세요.")
-    return {"x-goog-api-key": settings.gemini_api_key, "Content-Type": "application/json"}
+    key = keystore.get_key()
+    if not key:
+        raise HTTPException(400, "Gemini 키가 아직 없어요. 화면의 'Gemini 키 넣기'에서 무료 키를 넣어 주세요.")
+    return {"x-goog-api-key": key, "Content-Type": "application/json"}
 
 
 def _fail(r: httpx.Response) -> None:

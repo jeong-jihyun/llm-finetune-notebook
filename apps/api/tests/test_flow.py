@@ -97,6 +97,36 @@ def test_model_pick():
     assert llm.pick_embed_models(models) == ["gemini-embedding-2", "gemini-embedding-001"]
 
 
+def test_gemini_key_popup_api():
+    """화면에서 넣는 Gemini 키: 필요한 비밀번호, 잘못된 모양 거절, 구글 확인 후 저장, 끝 4자리만 노출, 삭제."""
+    import httpx
+    from app.services import keystore
+
+    keystore.clear_key(); settings.gemini_api_key = ""
+    assert c.get("/settings/gemini").status_code == 401
+    assert c.get("/settings/gemini", headers=H).json()["has_key"] is False
+    try:
+        llm._headers(); raise AssertionError("키 없는데 통과함")
+    except Exception as e:
+        assert "Gemini 키가 아직 없어요" in str(e.detail)
+    assert c.post("/settings/gemini", headers=H, json={"key": "짧음"}).status_code == 400
+
+    real_get = httpx.get
+    httpx.get = lambda url, **kw: httpx.Response(400, text="API key not valid")
+    assert c.post("/settings/gemini", headers=H, json={"key": "AIza" + "x" * 35}).status_code == 400
+    assert c.get("/settings/gemini", headers=H).json()["has_key"] is False  # 틀린 키는 저장 안 됨
+    httpx.get = lambda url, **kw: httpx.Response(200, json={"models": []})
+    r = c.post("/settings/gemini", headers=H, json={"key": " \"AIza" + "y" * 31 + "WXYZ\" "})
+    httpx.get = real_get
+    assert r.status_code == 200 and r.json()["tail"] == "…WXYZ"
+    st = c.get("/settings/gemini", headers=H).json()
+    assert st == {"has_key": True, "source": "screen", "tail": "…WXYZ"} and "yyyy" not in str(st)
+    assert llm._headers()["x-goog-api-key"].endswith("WXYZ")
+    keystore._mem["loaded"] = False  # 다른 서버 인스턴스처럼 저장소에서 다시 읽어도 남아 있어야 함
+    assert keystore.get_key().endswith("WXYZ")
+    assert c.delete("/settings/gemini", headers=H).json()["source"] == "none"
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
