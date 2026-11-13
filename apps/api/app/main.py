@@ -1,11 +1,14 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
-from app.routers import finetune
+from app import store
+from app.routers import chat, documents, finetune
 
 app = FastAPI(title="llm-finetune-notebook API")
 
-# 개발 중에는 로컬 웹만 허용. 배포 시 Vercel 주소를 추가한다.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -13,9 +16,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(documents.router)
+app.include_router(chat.router)
 app.include_router(finetune.router)
+
+STATIC = Path(__file__).parent / "static"
+
+
+@app.on_event("startup")
+def _startup():
+    store.init()
 
 
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    return FileResponse(STATIC / "index.html")

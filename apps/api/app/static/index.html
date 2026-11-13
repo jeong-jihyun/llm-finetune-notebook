@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>자료 노트북</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --line:#e3e6ea; --main:#3563e9; --text:#1c2230; --sub:#6b7280; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; background:var(--bg); color:var(--text); }
+  .app { display:flex; min-height:100vh; }
+  nav { display:flex; gap:4px; background:var(--card); border-right:1px solid var(--line); flex-direction:column; width:180px; padding:16px 10px; }
+  nav h1 { font-size:16px; margin:4px 8px 12px; }
+  nav button { text-align:left; border:0; background:none; padding:10px 12px; border-radius:8px; font-size:15px; cursor:pointer; color:var(--text); }
+  nav button.on { background:#e8eefc; color:var(--main); font-weight:600; }
+  main { flex:1; padding:20px; max-width:760px; width:100%; margin:0 auto; padding-bottom:90px; }
+  section { display:none; } section.on { display:block; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
+  .btn { background:var(--main); color:#fff; border:0; border-radius:8px; padding:10px 16px; font-size:15px; cursor:pointer; }
+  .btn:disabled { opacity:.5; }
+  .ghost { background:none; border:1px solid var(--line); color:var(--sub); border-radius:8px; padding:6px 10px; cursor:pointer; }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .sub { color:var(--sub); font-size:13px; }
+  .msg { white-space:pre-wrap; line-height:1.55; }
+  .q { background:#e8eefc; border-radius:12px; padding:10px 12px; margin:10px 0 10px auto; max-width:85%; width:fit-content; }
+  .chip { display:inline-block; font-size:12px; border:1px solid var(--line); border-radius:999px; padding:2px 10px; margin:6px 6px 0 0; cursor:pointer; color:var(--main); background:#fff; }
+  .snip { font-size:13px; color:var(--sub); border-left:3px solid var(--line); padding-left:8px; margin-top:6px; display:none; }
+  .ask { position:sticky; bottom:0; display:flex; gap:8px; background:var(--bg); padding:10px 0; }
+  .ask input { flex:1; padding:12px; border:1px solid var(--line); border-radius:10px; font-size:16px; }
+  #status { font-size:13px; margin:8px 0; }
+  .err { color:#c0392b; }
+  @media (max-width: 720px) {
+    .app { flex-direction:column-reverse; }
+    nav { position:fixed; bottom:0; left:0; right:0; width:100%; flex-direction:row; border-right:0; border-top:1px solid var(--line); padding:6px; z-index:10; }
+    nav h1 { display:none; }
+    nav button { flex:1; text-align:center; padding:12px 4px; }
+    main { padding:14px; padding-bottom:90px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav>
+    <h1>📚 자료 노트북</h1>
+    <button id="t-docs" class="on" onclick="show('docs')">자료함</button>
+    <button id="t-chat" onclick="show('chat')">채팅</button>
+  </nav>
+  <main>
+    <section id="docs" class="on">
+      <h2>자료함</h2>
+      <div class="card">
+        <input id="file" type="file" accept=".txt,.md,.pdf" multiple>
+        <div style="margin-top:10px"><button class="btn" id="upBtn" onclick="upload()">올리기</button></div>
+        <div id="status" class="sub">txt, md, pdf 파일 (파일당 10MB까지)</div>
+      </div>
+      <div id="list"></div>
+    </section>
+    <section id="chat">
+      <h2>채팅</h2>
+      <div id="log"><div class="sub">올린 자료를 바탕으로 질문해 보세요.</div></div>
+      <div class="ask">
+        <input id="q" placeholder="질문을 입력하세요" onkeydown="if(event.key==='Enter')send()">
+        <button class="btn" id="sendBtn" onclick="send()">보내기</button>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+function show(name){
+  for (const n of ['docs','chat']) { $(n).classList.toggle('on', n===name); $('t-'+n).classList.toggle('on', n===name); }
+  if (name==='docs') load();
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(data.detail || ('오류 '+r.status));
+  return data;
+}
+async function load(){
+  try {
+    const docs = await api('/documents');
+    $('list').innerHTML = docs.length ? docs.map(d => `
+      <div class="card row"><div><b>${esc(d.title)}</b><div class="sub">조각 ${d.chunk_count}개 · ${esc(d.created_at)}</div></div>
+      <button class="ghost" onclick="del(${d.id})">삭제</button></div>`).join('')
+      : '<div class="sub">아직 올린 자료가 없어요.</div>';
+  } catch(e) { $('list').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; }
+}
+async function upload(){
+  const files = $('file').files;
+  if (!files.length) { $('status').innerHTML = '<span class="err">파일을 먼저 선택해 주세요.</span>'; return; }
+  $('upBtn').disabled = true;
+  for (const f of files) {
+    $('status').textContent = f.name + ' 처리 중… (글 추출 → 조각내기 → 임베딩)';
+    const fd = new FormData(); fd.append('file', f);
+    try { await api('/documents', {method:'POST', body: fd}); }
+    catch(e) { $('status').innerHTML = '<span class="err">'+esc(f.name)+': '+esc(e.message)+'</span>'; $('upBtn').disabled = false; return; }
+  }
+  $('status').textContent = '완료! 채팅 탭에서 질문해 보세요.';
+  $('file').value = ''; $('upBtn').disabled = false; load();
+}
+async function del(id){ if (confirm('이 자료를 삭제할까요?')) { await api('/documents/'+id, {method:'DELETE'}); load(); } }
+async function send(){
+  const q = $('q').value.trim(); if (!q) return;
+  $('q').value = ''; $('sendBtn').disabled = true;
+  const log = $('log'); if (log.firstElementChild && log.firstElementChild.classList.contains('sub')) log.innerHTML = '';
+  log.insertAdjacentHTML('beforeend', '<div class="q">'+esc(q)+'</div>');
+  const holder = document.createElement('div'); holder.className = 'card'; holder.innerHTML = '<span class="sub">답변 만드는 중…</span>';
+  log.appendChild(holder); holder.scrollIntoView({block:'end'});
+  try {
+    const r = await api('/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({question:q})});
+    const id = 's'+Date.now();
+    holder.innerHTML = '<div class="msg">'+esc(r.answer)+'</div>' +
+      r.sources.map(s => `<span class="chip" onclick="toggle('${id}${s.n}')">[${s.n}] ${esc(s.title)}</span>`).join('') +
+      r.sources.map(s => `<div class="snip" id="${id}${s.n}">${esc(s.snippet)}…</div>`).join('');
+  } catch(e) { holder.innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
+  $('sendBtn').disabled = false; holder.scrollIntoView({block:'end'});
+}
+function toggle(id){ const e = $(id); e.style.display = e.style.display==='block' ? 'none' : 'block'; }
+load();
+</script>
+</body>
+</html>

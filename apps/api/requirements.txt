@@ -3,5 +3,5 @@ uvicorn[standard]>=0.30
 pydantic-settings>=2.4
 python-multipart>=0.0.9
 openai>=1.50
-supabase>=2.8
+numpy>=1.26
 pypdf>=5.0

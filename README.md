@@ -23,21 +23,23 @@ docs/       설계 문서
 ## 시작하기 (Windows PowerShell)
 
 ```powershell
-# 1) API 실행
 cd apps\api
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1      # 오류 나면: Set-ExecutionPolicy -Scope Process Bypass
 pip install -r requirements.txt
-Copy-Item ..\..\.env.example ..\..\.env   # 값 채우기
+Copy-Item ..\..\.env.example .env   # apps\api\.env 에 OPENAI_API_KEY 입력
 uvicorn app.main:app --reload --port 8000
-# 확인: http://localhost:8000/health
-
-# 2) DB: Supabase SQL Editor에 supabase\migrations\0001_init.sql 붙여넣고 실행
 ```
+
+브라우저에서 http://localhost:8000 → **자료함**에서 txt/md/pdf 올리기 → **채팅**에서 질문.
+(같은 와이파이의 폰에서는 `uvicorn ... --host 0.0.0.0` 로 켜고 `http://PC주소:8000` 접속)
+
+> 1단계는 시험하기 쉽게 로컬 SQLite 저장 + 서버가 직접 보여주는 반응형 화면입니다.
+> Supabase(pgvector)·Next.js로 바꾸는 것은 이후 단계입니다. 자료는 `apps/api/data/`에 저장됩니다(git 제외).
 
 ## 개발 순서
 
-1. RAG 채팅 MVP (업로드 → 질문 → 출처 표시)
+1. ✅ RAG 채팅 MVP (업로드 → 질문 → 출처 표시) — 로컬 저장 버전
 2. 학습 데이터 생성 + 파인튜닝 작업 관리
 3. 학습 모델 연결 + 기본/학습 모델 답변 비교 화면
 
