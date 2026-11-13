@@ -41,6 +41,7 @@ def fake_complete(system, user):
     return "테스트 답변 [1]"
 
 
+REAL_COMPLETE = llm.complete  # 실제 함수(시간 초과 테스트용)
 llm.embed = fake_embed
 llm.complete = fake_complete
 from app.main import app  # noqa: E402
@@ -232,6 +233,48 @@ def test_gemini_key_popup_api():
     keystore._mem["loaded"] = False  # 다른 서버 인스턴스처럼 저장소에서 다시 읽어도 남아 있어야 함
     assert keystore.get_key().endswith("WXYZ")
     assert c.delete("/settings/gemini", headers=H).json()["source"] == "none"
+
+
+def test_gemini_timeout_is_friendly_not_500():
+    """Gemini가 응답하지 않아도 500이 아니라 안내 메시지(504)가 나오고, 멈춘 모델 다음 후보로 넘어간다."""
+    import httpx
+    from fastapi import HTTPException
+
+    saved = (llm._send, llm.chat_model, llm._headers)
+    llm._headers = lambda: {"x-goog-api-key": "k", "Content-Type": "application/json"}
+    real_request = httpx.request
+
+    def timeout_req(*a, **kw):
+        raise httpx.ReadTimeout("read timed out")
+
+    httpx.request = timeout_req
+    try:
+        llm._send("POST", "models/x:generateContent", {})
+        raise AssertionError("시간 초과인데 통과함")
+    except HTTPException as e:
+        assert e.status_code == 504 and "시간 안에" in e.detail
+    finally:
+        httpx.request = real_request
+
+    llm.chat_model = lambda: ["slow", "fast"]
+    calls = []
+
+    def fake_send(method, path, json=None, timeout=40):
+        calls.append(path)
+        if "slow" in path:
+            raise HTTPException(504, "시간 초과")
+        return {"candidates": [{"content": {"parts": [{"text": "OK"}]}}]}
+
+    llm._send = fake_send
+    try:
+        assert REAL_COMPLETE("s", "u") == "OK" and len(calls) == 2
+        llm._send = lambda *a, **k: (_ for _ in ()).throw(HTTPException(504, "시간 초과"))
+        try:
+            REAL_COMPLETE("s", "u"); raise AssertionError("모두 실패인데 통과함")
+        except HTTPException as e:
+            assert e.status_code == 504
+    finally:
+        llm._send, llm.chat_model, llm._headers = saved
 
 
 if __name__ == "__main__":

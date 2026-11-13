@@ -1,6 +1,7 @@
 """Gemini API (무료 등급) 호출. 모델 이름은 자주 바뀌므로 사용 가능한 모델을 조회해서 고른다."""
 import math
 import re
+import time
 
 import httpx
 from fastapi import HTTPException
@@ -28,8 +29,13 @@ def _fail(r: httpx.Response) -> None:
     raise HTTPException(502, f"Gemini 오류 {r.status_code}: {r.text[:200]}")
 
 
-def _send(method: str, path: str, json: dict | None = None) -> dict:
-    r = httpx.request(method, f"{BASE}/{path}", headers=_headers(), json=json, timeout=55)
+def _send(method: str, path: str, json: dict | None = None, timeout: float = 40) -> dict:
+    try:
+        r = httpx.request(method, f"{BASE}/{path}", headers=_headers(), json=json, timeout=timeout)
+    except httpx.TimeoutException:
+        raise HTTPException(504, "Gemini가 시간 안에 답하지 않았어요. 잠시 뒤 다시 시도해 주세요.")
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Gemini에 연결하지 못했어요 ({type(e).__name__}). 잠시 뒤 다시 시도해 주세요.")
     if r.status_code >= 400:
         _fail(r)
     return r.json()
@@ -126,13 +132,17 @@ def complete(system: str, user: str) -> str:
         "generationConfig": {"temperature": 0.2},
     }
     last: HTTPException | None = None
+    deadline = time.monotonic() + 48  # Vercel 함수 제한(60초) 안에서 끝내기
     for model in chat_model():
+        left = deadline - time.monotonic()
+        if left < 8:
+            break
         try:
-            data = _send("POST", f"models/{model}:generateContent", body)
+            data = _send("POST", f"models/{model}:generateContent", body, timeout=min(25, left))
         except HTTPException as e:
             if e.status_code == 429:
                 raise
-            last = e  # 이 모델이 안 되면 다음 후보로
+            last = e  # 이 모델이 안 되면(시간 초과 포함) 다음 후보로
             continue
         parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
         return "".join(p.get("text", "") for p in parts) or "답변을 만들지 못했습니다."
