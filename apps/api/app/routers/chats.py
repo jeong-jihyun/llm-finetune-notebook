@@ -15,8 +15,22 @@ class TitleIn(BaseModel):
     title: str = ""
 
 
+MAX_IMAGES = 4
+IMG_MIMES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_IMG_B64 = 1_400_000      # 이미지 1장 (base64 글자 수)
+MAX_TOTAL_B64 = 3_600_000    # 이미지 전체 합 — Vercel 요청 한도(4.5MB) 안에 들어가게
+MAX_THUMB = 60_000
+
+
+class ImageIn(BaseModel):
+    mime: str
+    data: str
+
+
 class AskIn(BaseModel):
-    question: str
+    question: str = ""
+    images: list[ImageIn] = []
+    thumbs: list[str] = []
 
 
 class TextIn(BaseModel):
@@ -63,11 +77,24 @@ def messages(gid: str):
 @router.post("/{gid}/ask")
 def ask(gid: str, body: AskIn):
     q = body.question.strip()
-    if not q:
+    if not q and not body.images:
         raise HTTPException(400, "질문을 입력해 주세요")
+    if len(body.images) > MAX_IMAGES:
+        raise HTTPException(400, f"이미지는 한 번에 {MAX_IMAGES}장까지 보낼 수 있어요")
+    images = []
+    for im in body.images:
+        if im.mime not in IMG_MIMES:
+            raise HTTPException(400, "이미지는 jpg, png, webp, gif만 가능해요")
+        if len(im.data) > MAX_IMG_B64:
+            raise HTTPException(413, "이미지가 너무 커요. 더 작은 이미지로 올려 주세요")
+        images.append({"mime": im.mime, "data": im.data})
+    if sum(len(i["data"]) for i in images) > MAX_TOTAL_B64:
+        raise HTTPException(413, "이미지 용량 합이 너무 커요. 장수를 줄여 주세요")
+    thumbs = [t for t in body.thumbs[:MAX_IMAGES] if t.startswith("data:image/") and len(t) <= MAX_THUMB]
     chats.get_group(gid)  # 그룹이 있는지 먼저 확인
-    result = rag.answer(gid, q)
-    chats.add_exchange(gid, q, result)  # 답변이 성공했을 때만 기록 (+ 첫 질문이면 제목 자동 생성)
+    q = q or "이 이미지를 설명해 주세요."
+    result = rag.answer(gid, q, images or None)
+    chats.add_exchange(gid, q, result, thumbs or None)  # 답변이 성공했을 때만 기록 (+ 첫 질문이면 제목 자동 생성)
     return result
 
 

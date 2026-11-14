@@ -186,10 +186,14 @@ def _gen(model: str, body: dict, first_byte: float, deadline: float) -> str:
     return out
 
 
-def complete(system: str, user: str) -> str:
+def complete(system: str, user: str, images: list[dict] | None = None) -> str:
+    """images: [{'mime': 'image/jpeg', 'data': base64문자열}] — 질문과 함께 Gemini에 보여 줄 그림(스크린샷 등)."""
+    parts: list[dict] = [{"text": user}]
+    for im in images or []:
+        parts.append({"inline_data": {"mime_type": im["mime"], "data": im["data"]}})
     body = {
         "systemInstruction": {"parts": [{"text": system}]},
-        "contents": [{"role": "user", "parts": [{"text": user}]}],
+        "contents": [{"role": "user", "parts": parts}],
     }
     last: HTTPException | None = None
     deadline = time.monotonic() + 50  # Vercel 함수 제한(60초) 안에서 끝내기

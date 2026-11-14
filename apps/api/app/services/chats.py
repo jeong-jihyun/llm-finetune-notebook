@@ -143,11 +143,14 @@ def _auto_title(question: str, answer: str) -> str:
         return fallback
 
 
-def add_exchange(gid: str, question: str, answer: dict) -> None:
+def add_exchange(gid: str, question: str, answer: dict, thumbs: list[str] | None = None) -> None:
     g = _check(gid)
     msgs = get_messages(gid)
     t = now_str()
-    msgs.append({"role": "user", "text": question, "t": t})
+    user_msg = {"role": "user", "text": question, "t": t}
+    if thumbs:
+        user_msg["thumbs"] = thumbs  # 작은 미리보기만 저장 (원본은 저장 공간 절약을 위해 보관 안 함)
+    msgs.append(user_msg)
     msgs.append({"role": "assistant", "text": answer["answer"], "sources": answer.get("sources", []), "t": t})
     msgs = msgs[-MAX_MESSAGES:]
     storage.blob_put(f"chats/{gid}.json", json.dumps({"messages": msgs}, ensure_ascii=False).encode("utf-8"))

@@ -33,7 +33,12 @@ def fake_embed(texts):
     return out
 
 
-def fake_complete(system, user):
+LAST_IMAGES = []
+
+
+def fake_complete(system, user, images=None):
+    if images:
+        LAST_IMAGES[:] = images  # 이미지가 실린 호출만 기록 (제목 자동 짓기 호출이 지우지 않게)
     if "글을 만드는" in system:  # 산출물 만들기 / 이어 쓰기
         return "새로 이어진 내용입니다" if "이어 쓰기 요청" in user else "# 요약\n흑돼지와 감귤 정리"
     if "제목" in system:  # 대화 제목 자동 짓기
@@ -386,6 +391,36 @@ def test_streaming_collects_chunks_and_partial():
             assert getattr(e, "status_code", 0) == 504
     finally:
         httpx.stream, llm._headers = saved
+
+
+def test_image_attach():
+    """스크린샷 첨부: 질문 없이도 가능, 자료 없이도 이미지로 답함, 미리보기 저장, 장수·형식·용량 제한, Gemini에 inline_data로 전달."""
+    g = mk()
+    img = {"mime": "image/jpeg", "data": "QUJD" * 10}
+    thumb = "data:image/jpeg;base64," + "QUJD" * 5
+    r = c.post(f"/chats/{g['id']}/ask", headers=H, json={"question": "", "images": [img, img], "thumbs": [thumb, "엉터리"]})
+    assert r.status_code == 200 and r.json()["answer"] == "테스트 답변 [1]"
+    assert len(LAST_IMAGES) == 2  # 자료가 없어도 이미지는 Gemini까지 전달됨
+    msgs = c.get(f"/chats/{g['id']}", headers=H).json()["messages"]
+    assert msgs[0]["text"] == "이 이미지를 설명해 주세요." and msgs[0]["thumbs"] == [thumb]  # 올바른 미리보기만 저장
+    assert "QUJD" * 10 not in str(msgs)  # 원본은 저장 안 함
+    post = lambda body: c.post(f"/chats/{g['id']}/ask", headers=H, json=body)
+    assert post({"question": ""}).status_code == 400
+    assert post({"question": "x", "images": [img] * 5}).status_code == 400
+    assert post({"question": "x", "images": [{"mime": "application/pdf", "data": "QUJD"}]}).status_code == 400
+    assert post({"question": "x", "images": [{"mime": "image/png", "data": "A" * 1_500_000}]}).status_code == 413
+    assert post({"question": "x", "images": [{"mime": "image/png", "data": "A" * 1_300_000}] * 3}).status_code == 413
+
+    saved = llm._gen
+    seen = {}
+    llm._gen = lambda model, body, fb, dl: seen.setdefault("parts", body["contents"][0]["parts"]) and "OK"
+    saved_models = llm.chat_model
+    llm.chat_model = lambda: ["m"]
+    try:
+        assert REAL_COMPLETE("s", "질문", [img]) == "OK"
+        assert seen["parts"][1] == {"inline_data": {"mime_type": "image/jpeg", "data": img["data"]}}
+    finally:
+        llm._gen, llm.chat_model = saved, saved_models
 
 
 if __name__ == "__main__":

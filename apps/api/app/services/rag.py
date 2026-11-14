@@ -23,14 +23,23 @@ def _overview(gid: str, per_doc: int = 400, max_docs: int = 8) -> str:
     return "\n".join(lines)
 
 
-def answer(gid: str, question: str) -> dict:
+IMG_SYSTEM_ADD = (
+    " 사용자가 이미지(스크린샷 등)를 함께 보냈다면 그 이미지도 근거로 보고, 보이는 내용을 설명하거나 질문에 답하세요."
+)
+
+
+def answer(gid: str, question: str, images: list[dict] | None = None) -> dict:
+    if images and not storage.list_documents(gid):
+        # 올린 자료는 없고 이미지만 있는 경우: 이미지만 보고 답한다
+        text = llm.complete(SYSTEM + IMG_SYSTEM_ADD, f"[질문]\n{question}", images)
+        return {"answer": text, "sources": []}
     if not storage.list_documents(gid):
         return {"answer": "이 대화에는 아직 올린 자료가 없습니다. 오른쪽 자료 칸(폰은 '자료' 탭)에서 파일을 올려 주세요.", "sources": []}
     hits = storage.search(gid, llm.embed([question])[0], settings.top_k)
     if not hits:
         return {"answer": "관련 자료를 찾지 못했습니다. 자료를 다시 올려 보세요.", "sources": []}
     context = "\n\n".join(f"[{i + 1}] ({h['title']})\n{h['content']}" for i, h in enumerate(hits))
-    text = llm.complete(SYSTEM, f"[자료 목록]\n{_overview(gid)}\n\n[자료]\n{context}\n\n[질문]\n{question}")
+    text = llm.complete(SYSTEM + (IMG_SYSTEM_ADD if images else ""), f"[자료 목록]\n{_overview(gid)}\n\n[자료]\n{context}\n\n[질문]\n{question}", images)
     sources = [
         {"n": i + 1, "title": h["title"], "snippet": h["content"][:200], "score": round(h["score"], 3)}
         for i, h in enumerate(hits)

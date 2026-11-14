@@ -84,6 +84,30 @@
   .ohead { padding:12px 14px; background:var(--card); border-bottom:1px solid var(--line); }
   .otools { display:flex; flex-wrap:wrap; gap:6px; padding:8px 14px; background:var(--card); border-bottom:1px solid var(--line); }
   .otext { flex:1; overflow-y:auto; padding:16px; white-space:pre-wrap; line-height:1.65; font-size:15px; }
+
+  /* 마크다운 보기 */
+  .md { white-space:normal !important; line-height:1.65; word-break:break-word; }
+  .md > :first-child { margin-top:0; } .md > :last-child { margin-bottom:0; }
+  .md p { margin:.5em 0; } .md h1,.md h2,.md h3,.md h4,.md h5,.md h6 { margin:1em 0 .4em; line-height:1.35; }
+  .md h1 { font-size:1.3em; } .md h2 { font-size:1.18em; } .md h3 { font-size:1.07em; } .md h4,.md h5,.md h6 { font-size:1em; }
+  .md ul,.md ol { margin:.4em 0; padding-left:1.4em; } .md li { margin:.2em 0; }
+  .md code { background:#eef1f6; border-radius:4px; padding:1px 5px; font-size:.92em; font-family:ui-monospace,Consolas,monospace; }
+  .md pre { background:#1f2430; color:#e8ecf4; border-radius:8px; padding:10px 12px; overflow-x:auto; margin:.6em 0; }
+  .md pre code { background:none; color:inherit; padding:0; }
+  .md blockquote { margin:.6em 0; padding:2px 12px; border-left:3px solid var(--line); color:var(--sub); }
+  .md hr { border:0; border-top:1px solid var(--line); margin:1em 0; }
+  .md a { color:var(--main); }
+  .md .tbl { overflow-x:auto; margin:.6em 0; }
+  .md table { border-collapse:collapse; font-size:.95em; } .md th,.md td { border:1px solid var(--line); padding:5px 9px; text-align:left; vertical-align:top; } .md th { background:#f3f5f9; }
+
+  /* 이미지 첨부 */
+  .camBtn { display:flex; align-items:center; border:1px solid var(--line); border-radius:8px; padding:0 11px; cursor:pointer; background:#fff; font-size:18px; }
+  #attach { display:none; gap:8px; flex-wrap:wrap; padding:8px 14px 0; background:var(--card); border-top:1px solid var(--line); }
+  .att { position:relative; } .att img { width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--line); display:block; }
+  .att button { position:absolute; top:-7px; right:-7px; width:22px; height:22px; border-radius:50%; border:0; background:#c0392b; color:#fff; font-size:13px; line-height:22px; padding:0; cursor:pointer; }
+  .attn { align-self:center; font-size:12px; color:var(--sub); }
+  .q .th { display:inline-block; width:84px; height:84px; object-fit:cover; border-radius:8px; margin:0 6px 6px 0; vertical-align:top; cursor:zoom-in; }
+  #chatCol.dragover { outline:3px dashed var(--main); outline-offset:-6px; }
   #contbox { display:none; padding:10px 14px; background:#fffbe8; border-top:1px solid var(--line); }
 
   /* 팝업 / 알림 */
@@ -196,8 +220,11 @@
             <div class="cbody" id="cbody" data-sub="chat">
               <div id="chatCol">
                 <div id="log"></div>
+                <div id="attach"></div>
                 <div class="ask">
-                  <input id="q" type="text" placeholder="질문을 입력하세요" onkeydown="if(event.key==='Enter')send()">
+                  <label class="camBtn" for="imgIn" title="이미지·스크린샷 첨부 (여러 장 가능)">📷</label>
+                  <input id="imgIn" type="file" accept="image/*" multiple hidden>
+                  <input id="q" type="text" placeholder="질문 입력 (스크린샷은 📷 또는 붙여넣기)" onkeydown="if(event.key==='Enter')send()">
                   <button class="btn" id="sendBtn" onclick="send()">보내기</button>
                 </div>
               </div>
@@ -240,12 +267,13 @@
               <span style="display:flex;gap:6px"><button class="ghost" onclick="renameOut()">✎</button><button class="ghost" onclick="delOut()">🗑</button></span></div>
               <div id="ometa" class="sub" style="margin-top:6px"></div></div>
             <div class="otools">
+              <button class="ghost" id="rawBtn" onclick="toggleRaw()">📝 원문 보기</button>
               <button class="ghost" onclick="copyOut()">📋 복사</button>
               <button class="ghost" onclick="downloadOut()">⬇ 내려받기</button>
               <button class="ghost" onclick="toggleCont()">✍ 이어서 쓰기</button>
               <button class="ghost" onclick="chatFromOut()">💬 대화로 이어가기</button>
             </div>
-            <div id="otext" class="otext"></div>
+            <div id="otext" class="otext md"></div>
             <div id="contbox">
               <textarea id="cinst" rows="2" placeholder="어떻게 이어 쓸까요? (예: 예시를 더 넣어줘) — 비워 두면 알아서 이어 써요"></textarea>
               <div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn" id="contBtn" onclick="doContinue()">이어 쓰기 시작</button><span id="contmsg" class="sub"></span></div>
@@ -348,9 +376,9 @@ function showConv(on){ $('convEmpty').style.display = on ? 'none' : 'flex'; $('c
 function closeConv(){ cur = ''; openSeq++; showConv(false); renderGroupList(); }
 function subTab(n){ $('cbody').dataset.sub = n; $('st-chat').classList.toggle('on', n==='chat'); $('st-docs').classList.toggle('on', n==='docs'); }
 function msgHtml(m, i){
-  if (m.role === 'user') return `<div class="q" data-i="${i}">${esc(m.text)}</div>`;
+  if (m.role === 'user') return `<div class="q" data-i="${i}">${(m.thumbs||[]).map(t => `<img class="th" src="${esc(t)}" alt="첨부 이미지" onclick="zoomImg(this.src)">`).join('')}${(m.thumbs||[]).length ? '<br>' : ''}${esc(m.text)}</div>`;
   const sid = 's'+i+'_';
-  return `<div class="card" data-i="${i}"><div class="msg">${esc(m.text)}</div>` +
+  return `<div class="card" data-i="${i}"><div class="msg md">${md(m.text)}</div>` +
     (m.sources||[]).map(s => `<span class="chip" onclick="toggle('${sid}${s.n}')">[${s.n}] ${esc(s.title)}</span>`).join('') +
     (m.sources||[]).map(s => `<div class="snip" id="${sid}${s.n}">${esc(s.snippet)}…</div>`).join('') +
     `<div class="mact"><button class="ghost sm" onclick="saveAnswer(${i})">📦 산출물로 저장</button></div></div>`;
@@ -384,23 +412,114 @@ async function delGroup(){
   if (!confirm('"'+g.title+'" 대화와 이 대화에 올린 자료를 삭제할까요?\n(📦 산출물은 그대로 남아요)')) return;
   try { await api('/chats/'+cur, {method:'DELETE'}); closeConv(); await loadGroups(); } catch(e) { toast(e.message); }
 }
+
+// ---- 마크다운 보기 (외부 라이브러리 없이, 글 속 HTML은 모두 글자로 바꿔 안전하게) ----
+function mdInline(t){
+  const codes = [];
+  t = t.replace(/`([^`\n]+)`/g, (m, c) => { codes.push(c); return '\u0002'+(codes.length-1)+'\u0002'; });
+  t = t.replace(/\*\*([^*\n]+?)\*\*/g, '<b>$1</b>').replace(/__([^_\n]+?)__/g, '<b>$1</b>');
+  t = t.replace(/(^|[^*\w])\*([^*\s][^*\n]*?)\*(?!\*)/g, '$1<i>$2</i>').replace(/~~([^~\n]+?)~~/g, '<s>$1</s>');
+  t = t.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  return t.replace(/\u0002(\d+)\u0002/g, (m, i) => '<code>'+codes[+i]+'</code>');
+}
+function md(src){
+  src = String(src == null ? '' : src).replace(/\r\n?/g, '\n');
+  const fences = [];
+  src = src.replace(/^[ \t]*```[^\n]*\n([\s\S]*?)(?:^[ \t]*```[ \t]*$|$(?![\s\S]))/gm, (m, c) => { fences.push(c.replace(/\n$/, '')); return '\u0001'+(fences.length-1)+'\u0001'; });
+  const L = src.split('\n'), out = [], stack = [];   // stack: 열린 목록 {tag, indent}
+  let para = [];
+  const flush = () => { if (para.length) { out.push('<p>'+para.join('<br>')+'</p>'); para = []; } };
+  const closeTo = n => { while (stack.length > n) out.push('</li></'+stack.pop().tag+'>'); };
+  const cells = r => r.trim().replace(/^\||\|$/g, '').split('|').map(x => mdInline(esc(x.trim())));
+  for (let i = 0; i < L.length; i++) {
+    const raw = L[i]; let m;
+    if ((m = raw.match(/^\u0001(\d+)\u0001$/))) { flush(); closeTo(0); out.push('<pre><code>'+esc(fences[+m[1]])+'</code></pre>'); continue; }
+    if (!raw.trim()) { flush(); continue; }
+    if ((m = raw.match(/^(\s*)([*+-]|\d+[.)])\s+(.*)$/)) && !/^\s*([-*_])(\s*\1){2,}\s*$/.test(raw)) {
+      flush(); const ind = m[1].replace(/\t/g, '    ').length, tag = /\d/.test(m[2]) ? 'ol' : 'ul';
+      while (stack.length && ind < stack[stack.length-1].indent) out.push('</li></'+stack.pop().tag+'>');
+      if (stack.length && ind === stack[stack.length-1].indent && stack[stack.length-1].tag === tag) out.push('</li><li>');
+      else if (stack.length && ind === stack[stack.length-1].indent) { out.push('</li></'+stack.pop().tag+'>'); stack.push({tag, indent:ind}); out.push('<'+tag+'><li>'); }
+      else { stack.push({tag, indent:ind}); out.push('<'+tag+'><li>'); }
+      out.push(mdInline(esc(m[3]))); continue;
+    }
+    if (stack.length && /^\s+\S/.test(raw) && !/^\s*>/.test(raw)) { out.push('<br>'+mdInline(esc(raw.trim()))); continue; }   // 목록 항목의 이어지는 줄
+    if (stack.length && !/^(#{1,6}\s|>|\||\u0001)/.test(raw) && !/^\s*([-*_])(\s*\1){2,}\s*$/.test(raw)) { out.push(' '+mdInline(esc(raw.trim()))); continue; }
+    closeTo(0);
+    if ((m = raw.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/))) { flush(); out.push('<h'+m[1].length+'>'+mdInline(esc(m[2]))+'</h'+m[1].length+'>'); continue; }
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(raw)) { flush(); out.push('<hr>'); continue; }
+    if (/^\s*>/.test(raw)) { flush(); const q = []; while (i < L.length && /^\s*>/.test(L[i])) q.push(L[i++].replace(/^\s*>\s?/, '')); i--; out.push('<blockquote>'+md(q.join('\n'))+'</blockquote>'); continue; }
+    if (raw.includes('|') && i+1 < L.length && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(L[i+1])) {
+      flush(); const head = cells(raw); i += 2; const rows = [];
+      while (i < L.length && L[i].includes('|') && L[i].trim()) rows.push(cells(L[i++])); i--;
+      out.push('<div class="tbl"><table><thead><tr>'+head.map(h => '<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+
+        rows.map(r => '<tr>'+r.map(c => '<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'); continue;
+    }
+    para.push(mdInline(esc(raw.trim())));
+  }
+  flush(); closeTo(0);
+  return out.join('').replace(/\u0001(\d+)\u0001/g, (m, i) => '<pre><code>'+esc(fences[+i])+'</code></pre>');
+}
+
+// ---- 이미지(스크린샷) 첨부: 올리기 전에 자동으로 줄여서 폰에서도 한도(4.5MB)에 안 걸리게 ----
+const MAX_IMGS = 4;
+let IMGS = [], imgBusy = 0;    // IMGS: {mime, data(base64), thumb(dataURL)}
+function loadImg(file){
+  return new Promise((res, rej) => {
+    const u = URL.createObjectURL(file), im = new Image();
+    im.onload = () => { URL.revokeObjectURL(u); res(im); };
+    im.onerror = () => { URL.revokeObjectURL(u); rej(new Error('이미지를 읽지 못했어요: '+(file.name || '붙여넣은 이미지'))); };
+    im.src = u;
+  });
+}
+function toJpeg(im, side, q){
+  const k = Math.min(1, side / Math.max(im.naturalWidth, im.naturalHeight)), cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(im.naturalWidth * k)); cv.height = Math.max(1, Math.round(im.naturalHeight * k));
+  const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(im, 0, 0, cv.width, cv.height);
+  return cv.toDataURL('image/jpeg', q);
+}
+async function shrinkImg(file){
+  const im = await loadImg(file); let url = '';
+  for (const [side, q] of [[1280, .8], [1024, .7], [800, .6], [600, .5]]) { url = toJpeg(im, side, q); if (url.length < 1_300_000) break; }
+  return {mime:'image/jpeg', data:url.split(',')[1], thumb:toJpeg(im, 140, .6)};
+}
+async function addImages(files){
+  files = [...files].filter(f => /^image\//.test(f.type));
+  if (!files.length) return;
+  const room = MAX_IMGS - IMGS.length;
+  if (files.length > room) toast('이미지는 한 번에 '+MAX_IMGS+'장까지예요'+(room > 0 ? ' ('+room+'장만 담았어요)' : ''));
+  imgBusy++; $('sendBtn').disabled = true;
+  try { for (const f of files.slice(0, Math.max(room, 0))) { try { IMGS.push(await shrinkImg(f)); renderAttach(); } catch(e) { toast(e.message); } } }
+  finally { imgBusy--; $('sendBtn').disabled = imgBusy > 0 || sending; }
+}
+function renderAttach(){
+  const a = $('attach'); a.style.display = IMGS.length ? 'flex' : 'none';
+  a.innerHTML = IMGS.map((x, i) => '<div class="att"><img src="'+esc(x.thumb)+'" alt="첨부 이미지 '+(i+1)+'"><button title="빼기" onclick="rmImg('+i+')">×</button></div>').join('') +
+    (IMGS.length ? '<span class="attn">'+IMGS.length+'/'+MAX_IMGS+'장 · 질문 없이 보내도 돼요</span>' : '');
+}
+function rmImg(i){ IMGS.splice(i, 1); renderAttach(); }
+function zoomImg(src){ const w = window.open(); if (w) { w.document.write('<img style="max-width:100%" src="'+esc(src)+'">'); w.document.close(); } }
+let sending = false;
 async function send(){
-  const q = $('q').value.trim(); if (!q || !cur) return;
-  const gid = cur; $('q').value = ''; $('sendBtn').disabled = true;
+  const q = $('q').value.trim(); if ((!q && !IMGS.length) || !cur || imgBusy || sending) return;
+  const gid = cur, imgs = IMGS; sending = true; $('q').value = ''; IMGS = []; renderAttach(); $('sendBtn').disabled = true;
   const log = $('log'); if (!MSGS.length) log.innerHTML = '';
-  const qi = MSGS.length;
-  log.insertAdjacentHTML('beforeend', '<div class="q" data-i="'+qi+'">'+esc(q)+'</div>');
-  const holder = document.createElement('div'); holder.className = 'card'; holder.innerHTML = '<span class="sub">답변 만드는 중…</span>';
+  const qi = MSGS.length, shownQ = q || '이 이미지를 설명해 주세요.', thumbs = imgs.map(x => x.thumb);
+  log.insertAdjacentHTML('beforeend', msgHtml({role:'user', text:shownQ, thumbs}, qi));
+  const holder = document.createElement('div'); holder.className = 'card'; holder.innerHTML = '<span class="sub">'+(imgs.length ? '이미지 '+imgs.length+'장과 함께 ' : '')+'답변 만드는 중…</span>';
   log.appendChild(holder); log.scrollTop = log.scrollHeight;
   try {
-    const r = await api('/chats/'+gid+'/ask', {method:'POST', headers:JSONH, body: JSON.stringify({question:q})});
+    const r = await api('/chats/'+gid+'/ask', {method:'POST', headers:JSONH, body: JSON.stringify({question:q, images: imgs.map(x => ({mime:x.mime, data:x.data})), thumbs})});
     if (gid === cur) {
-      MSGS.push({role:'user', text:q}, {role:'assistant', text:r.answer, sources:r.sources});
+      MSGS.push({role:'user', text:shownQ, thumbs}, {role:'assistant', text:r.answer, sources:r.sources});
       holder.outerHTML = msgHtml(MSGS[qi+1], qi+1);
     }
     loadGroups().catch(()=>{});   // 첫 질문이면 제목이 자동으로 지어지고, 최근 대화가 위로 올라감
-  } catch(e) { holder.innerHTML = '<span class="err">'+esc(e.message)+'</span>'; }
-  $('sendBtn').disabled = false; log.scrollTop = log.scrollHeight;
+  } catch(e) {
+    holder.innerHTML = '<span class="err">'+esc(e.message)+'</span>';
+    if (gid === cur && !IMGS.length && imgs.length) { IMGS = imgs; renderAttach(); $('q').value = q; }   // 실패하면 이미지·질문을 되돌려 다시 보내기 쉽게
+  }
+  sending = false; $('sendBtn').disabled = imgBusy > 0; log.scrollTop = log.scrollHeight;
 }
 function toggle(id){ const e = $(id); e.style.display = e.style.display==='block' ? 'none' : 'block'; }
 async function saveAnswer(i){
@@ -562,8 +681,12 @@ function renderOut(){
   const o = curOut; $('otitle').textContent = o.title;
   $('ometa').innerHTML = `<span class="badge ${esc(o.kind)}">${esc(KIND[o.kind]||'산출물')}</span>` +
     (o.group_title ? '원본 대화: '+(o.group_alive ? `<a href="#" onclick="goChat('${esc(o.group_id)}');return false">${esc(o.group_title)}</a>` : esc(o.group_title))+' · ' : '') + esc(o.updated_at) + ' · '+o.chars+'자';
-  $('otext').textContent = o.text;
+  const ot = $('otext'); ot.classList.toggle('md', !RAW);
+  if (RAW) ot.textContent = o.text; else ot.innerHTML = md(o.text);
+  $('rawBtn').textContent = RAW ? '👁 보기 모드' : '📝 원문 보기';
 }
+let RAW = false;
+function toggleRaw(){ RAW = !RAW; if (curOut) renderOut(); }
 async function openOutput(id){
   const seq = ++outSeq; showOut(true); $('otext').textContent = '불러오는 중…'; $('contbox').style.display = 'none'; $('contmsg').textContent = '';
   try { const o = await api('/outputs/'+id); if (seq !== outSeq) return; curOut = o; renderOut(); markOut(id); }
@@ -614,6 +737,12 @@ async function boot(){
   if (!window._keyChecked) { window._keyChecked = true; checkKeyOnce(); }
 }
 boot();
+
+$('imgIn').addEventListener('change', e => { addImages(e.target.files); e.target.value = ''; });
+$('q').addEventListener('paste', e => { const fs = [...(e.clipboardData ? e.clipboardData.files : [])].filter(f => /^image\//.test(f.type)); if (fs.length) { e.preventDefault(); addImages(fs); } });
+['dragover', 'dragenter'].forEach(ev => $('chatCol').addEventListener(ev, e => { if ([...(e.dataTransfer ? e.dataTransfer.types : [])].includes('Files')) { e.preventDefault(); $('chatCol').classList.add('dragover'); } }));
+['dragleave', 'drop'].forEach(ev => $('chatCol').addEventListener(ev, () => $('chatCol').classList.remove('dragover')));
+$('chatCol').addEventListener('drop', e => { const fs = [...(e.dataTransfer ? e.dataTransfer.files : [])].filter(f => /^image\//.test(f.type)); if (fs.length) { e.preventDefault(); addImages(fs); } });
 </script>
 </body>
 </html>
