@@ -1,4 +1,5 @@
 """Gemini API (무료 등급) 호출. 모델 이름은 자주 바뀌므로 사용 가능한 모델을 조회해서 고른다."""
+import json
 import math
 import re
 import time
@@ -131,15 +132,58 @@ def embed(texts: list[str]) -> list[list[float]]:
     return out
 
 
+MAX_OUT = 2048  # 답변 길이 상한 (끝없이 길어져 시간 초과되는 것 방지)
+
+
 def _gen_config(model: str, fast: bool = True) -> dict:
-    """새 Gemini(3 계열)는 기본이 '깊이 생각하기'라 간단한 질문도 30~40초 걸린다 → 생각을 최소로 줄인다."""
+    """새 Gemini(3 계열)는 기본이 '깊이 생각하기'라 느리다 → 생각을 최소로 줄인다."""
+    cfg: dict = {"maxOutputTokens": MAX_OUT}
     if not fast:
-        return {}
+        return cfg
     if re.search(r"gemini-3", model):
-        return {"thinkingConfig": {"thinkingLevel": "low"}}  # 3.8은 minimal 불가, low부터 가능
-    if re.search(r"gemini-2\.5", model):
-        return {"thinkingConfig": {"thinkingBudget": 0}}
-    return {"temperature": 0.2}
+        cfg["thinkingConfig"] = {"thinkingLevel": "low"}  # 3.8은 minimal 불가, low부터 가능
+    elif re.search(r"gemini-2\.5", model):
+        cfg["thinkingConfig"] = {"thinkingBudget": 0}
+    else:
+        cfg["temperature"] = 0.2
+    return cfg
+
+
+def _gen(model: str, body: dict, first_byte: float, deadline: float) -> str:
+    """스트리밍으로 받는다: 답이 만들어지는 대로 조각이 와서, 오래 조용해서 끊기는 일이 없다."""
+    url = f"{BASE}/models/{model}:streamGenerateContent?alt=sse"
+    text: list[str] = []
+    cut = False
+    try:
+        with httpx.stream("POST", url, headers=_headers(), json=body,
+                          timeout=httpx.Timeout(10, read=first_byte)) as r:
+            if r.status_code >= 400:
+                r.read()
+                _fail(r)
+            for line in r.iter_lines():
+                if time.monotonic() > deadline:
+                    cut = True
+                    break
+                if not line.startswith("data:"):
+                    continue
+                try:
+                    d = json.loads(line[5:])
+                except ValueError:
+                    continue
+                parts = (d.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+                text += [p["text"] for p in parts if p.get("text") and not p.get("thought")]
+    except httpx.TimeoutException:
+        if not text:
+            raise HTTPException(504, "Gemini가 시간 안에 답하지 않았어요. 잠시 뒤 다시 시도해 주세요.")
+        cut = True
+    except httpx.HTTPError as e:
+        if not text:
+            raise HTTPException(502, f"Gemini에 연결하지 못했어요 ({type(e).__name__}). 잠시 뒤 다시 시도해 주세요.")
+        cut = True
+    out = "".join(text)
+    if out and cut:
+        out += "\n\n(시간이 걸려 여기까지만 받았어요. 이어서 물어보면 계속 설명해 드려요.)"
+    return out
 
 
 def complete(system: str, user: str) -> str:
@@ -148,26 +192,23 @@ def complete(system: str, user: str) -> str:
         "contents": [{"role": "user", "parts": [{"text": user}]}],
     }
     last: HTTPException | None = None
-    deadline = time.monotonic() + 48  # Vercel 함수 제한(60초) 안에서 끝내기
+    deadline = time.monotonic() + 50  # Vercel 함수 제한(60초) 안에서 끝내기
     models = chat_model()
     now = time.monotonic()
     ready = [m for m in models if _bad_until.get(m, 0) <= now] or models  # 전부 쉬는 중이면 다 시도
     ready.sort(key=lambda m: 0 if m in _last_ok else 1)
     for model in ready:
-        left = deadline - time.monotonic()
-        if left < 8:
+        if deadline - time.monotonic() < 8:
             break
         t0 = time.monotonic()
         try:
             try:
-                data = _send("POST", f"models/{model}:generateContent",
-                             {**body, "generationConfig": _gen_config(model)}, timeout=min(15, left))
+                text = _gen(model, {**body, "generationConfig": _gen_config(model)}, 20, deadline)
             except HTTPException as e:
                 if e.status_code != 502 or "thinking" not in str(e.detail).lower():
                     raise
                 # 이 모델이 생각 설정을 거부하면 설정 없이 한 번 더
-                data = _send("POST", f"models/{model}:generateContent",
-                             {**body, "generationConfig": _gen_config(model, False)}, timeout=min(15, max(left - 1, 8)))
+                text = _gen(model, {**body, "generationConfig": _gen_config(model, False)}, 20, deadline)
         except HTTPException as e:
             print(f"[gemini] {model} 실패 {e.status_code} {time.monotonic() - t0:.1f}초", flush=True)
             if e.status_code == 429:
@@ -175,11 +216,10 @@ def complete(system: str, user: str) -> str:
             last = e  # 이 모델이 안 되면(과부하·시간 초과 포함) 다음 후보로
             _bad_until[model] = time.monotonic() + COOLDOWN
             continue
-        print(f"[gemini] {model} 성공 {time.monotonic() - t0:.1f}초", flush=True)
+        print(f"[gemini] {model} 성공 {time.monotonic() - t0:.1f}초 {len(text)}자", flush=True)
         _last_ok[:] = [model]
         _bad_until.pop(model, None)
-        parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
-        return "".join(p.get("text", "") for p in parts) or "답변을 만들지 못했습니다."
+        return text or "답변을 만들지 못했습니다."
     raise last or HTTPException(502, "Gemini 답변 생성에 실패했습니다")
 
 

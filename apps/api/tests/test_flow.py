@@ -247,7 +247,7 @@ def test_gemini_timeout_is_friendly_not_500():
     import httpx
     from fastapi import HTTPException
 
-    saved = (llm._send, llm.chat_model, llm._headers)
+    saved = (llm._gen, llm.chat_model, llm._headers)
     llm._headers = lambda: {"x-goog-api-key": "k", "Content-Type": "application/json"}
     real_request = httpx.request
 
@@ -266,46 +266,46 @@ def test_gemini_timeout_is_friendly_not_500():
     llm.chat_model = lambda: ["slow", "fast"]
     calls = []
 
-    def fake_send(method, path, json=None, timeout=40):
-        calls.append(path)
-        if "slow" in path:
+    def fake_gen(model, body, first_byte, deadline):
+        calls.append(model)
+        if model == "slow":
             raise HTTPException(504, "시간 초과")
-        return {"candidates": [{"content": {"parts": [{"text": "OK"}]}}]}
+        return "OK"
 
-    llm._send = fake_send
+    llm._gen = fake_gen
     try:
         assert REAL_COMPLETE("s", "u") == "OK" and len(calls) == 2
-        llm._send = lambda *a, **k: (_ for _ in ()).throw(HTTPException(504, "시간 초과"))
+        llm._gen = lambda *a, **k: (_ for _ in ()).throw(HTTPException(504, "시간 초과"))
         try:
             REAL_COMPLETE("s", "u"); raise AssertionError("모두 실패인데 통과함")
         except HTTPException as e:
             assert e.status_code == 504
     finally:
-        llm._send, llm.chat_model, llm._headers = saved
+        llm._gen, llm.chat_model, llm._headers = saved
 
 
 def test_overloaded_model_is_skipped_next_time():
     """503으로 막힌 최신 모델은 다음 질문에서 건너뛰고, 성공한 모델을 먼저 쓴다."""
     from fastapi import HTTPException
 
-    saved = (llm._send, llm.chat_model)
+    saved = (llm._gen, llm.chat_model)
     llm.chat_model = lambda: ["new-3.8", "mid-3.7", "ok-3.6"]
     llm._bad_until.clear(); llm._last_ok.clear()
     calls = []
 
-    def fake_send(method, path, json=None, timeout=40):
-        calls.append(path.split("/")[1].split(":")[0])
-        if "ok-3.6" not in path:
+    def fake_gen(model, body, first_byte, deadline):
+        calls.append(model)
+        if model != "ok-3.6":
             raise HTTPException(502, "Gemini 오류 503")
-        return {"candidates": [{"content": {"parts": [{"text": "OK"}]}}]}
+        return "OK"
 
-    llm._send = fake_send
+    llm._gen = fake_gen
     try:
         assert REAL_COMPLETE("s", "u") == "OK" and calls == ["new-3.8", "mid-3.7", "ok-3.6"]
         calls.clear()
         assert REAL_COMPLETE("s", "u") == "OK" and calls == ["ok-3.6"]  # 막힌 모델은 건너뜀
     finally:
-        llm._send, llm.chat_model = saved
+        llm._gen, llm.chat_model = saved
         llm._bad_until.clear(); llm._last_ok.clear()
 
 
@@ -313,27 +313,79 @@ def test_thinking_is_kept_short():
     """Gemini 3 계열은 생각을 low로 줄여 빠르게 답하고, 설정을 거부하면 설정 없이 다시 시도한다."""
     from fastapi import HTTPException
 
-    assert llm._gen_config("gemini-3.8-flash") == {"thinkingConfig": {"thinkingLevel": "low"}}
-    assert llm._gen_config("gemini-2.5-flash") == {"thinkingConfig": {"thinkingBudget": 0}}
+    assert llm._gen_config("gemini-3.8-flash")["thinkingConfig"] == {"thinkingLevel": "low"}
+    assert llm._gen_config("gemini-2.5-flash")["thinkingConfig"] == {"thinkingBudget": 0}
     assert "thinkingConfig" not in llm._gen_config("gemini-1.5-flash")
-    saved = (llm._send, llm.chat_model)
+    assert llm._gen_config("gemini-3.8-flash")["maxOutputTokens"] == llm.MAX_OUT
+    saved = (llm._gen, llm.chat_model)
     llm.chat_model = lambda: ["gemini-3.8-flash"]
     llm._bad_until.clear(); llm._last_ok.clear()
     seen = []
 
-    def fake_send(method, path, json=None, timeout=40):
-        seen.append(json["generationConfig"])
-        if json["generationConfig"]:
+    def fake_gen(model, body, first_byte, deadline):
+        seen.append(body["generationConfig"])
+        if "thinkingConfig" in body["generationConfig"]:
             raise HTTPException(502, "Gemini 오류 400: thinking level not supported")
-        return {"candidates": [{"content": {"parts": [{"text": "OK"}]}}]}
+        return "OK"
 
-    llm._send = fake_send
+    llm._gen = fake_gen
     try:
         assert REAL_COMPLETE("s", "u") == "OK"
-        assert seen == [{"thinkingConfig": {"thinkingLevel": "low"}}, {}]
+        assert "thinkingConfig" in seen[0] and "thinkingConfig" not in seen[1]
     finally:
-        llm._send, llm.chat_model = saved
+        llm._gen, llm.chat_model = saved
         llm._bad_until.clear(); llm._last_ok.clear()
+
+
+def test_streaming_collects_chunks_and_partial():
+    """스트리밍 조각을 이어 붙이고, 생각(thought) 조각은 빼고, 중간에 끊겨도 받은 만큼은 보여 준다."""
+    import contextlib
+    import json as _json
+    import time as _t
+
+    import httpx
+
+    class FakeResp:
+        status_code = 200
+
+        def __init__(self, lines, boom=False):
+            self.lines, self.boom = lines, boom
+
+        def iter_lines(self):
+            yield from self.lines
+            if self.boom:
+                raise httpx.ReadTimeout("조용해짐")
+
+    def sse(text, thought=False):
+        part = {"text": text, **({"thought": True} if thought else {})}
+        return "data: " + _json.dumps({"candidates": [{"content": {"parts": [part]}}]})
+
+    saved = (httpx.stream, llm._headers)
+    llm._headers = lambda: {"x-goog-api-key": "k"}
+    try:
+        @contextlib.contextmanager
+        def ok(*a, **k):
+            yield FakeResp([sse("생각중", True), "", sse("안녕"), sse("하세요")])
+        httpx.stream = ok
+        assert llm._gen("m", {}, 20, _t.monotonic() + 30) == "안녕하세요"
+
+        @contextlib.contextmanager
+        def cut(*a, **k):
+            yield FakeResp([sse("앞부분")], boom=True)
+        httpx.stream = cut
+        out = llm._gen("m", {}, 20, _t.monotonic() + 30)
+        assert out.startswith("앞부분") and "여기까지만" in out
+
+        @contextlib.contextmanager
+        def none(*a, **k):
+            yield FakeResp([], boom=True)
+        httpx.stream = none
+        try:
+            llm._gen("m", {}, 20, _t.monotonic() + 30); raise AssertionError("아무것도 못 받았는데 통과함")
+        except Exception as e:
+            assert getattr(e, "status_code", 0) == 504
+    finally:
+        httpx.stream, llm._headers = saved
 
 
 if __name__ == "__main__":
