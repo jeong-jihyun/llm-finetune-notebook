@@ -203,6 +203,13 @@ def test_model_pick():
     ]
     assert llm.pick_chat_models(models) == ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"]
     assert llm.pick_embed_models(models) == ["gemini-embedding-2", "gemini-embedding-001"]
+    # 실제 후보: 안정판 2.5 flash가 있으면 맨 앞(새 3.x 모델이 자주 막혀서)
+    saved = (llm.list_models, settings.gemini_chat_model)
+    llm.list_models = lambda: models; settings.gemini_chat_model = ""
+    try:
+        assert llm.chat_model() == ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"]
+    finally:
+        llm.list_models, settings.gemini_chat_model = saved
 
 
 def test_gemini_key_popup_api():

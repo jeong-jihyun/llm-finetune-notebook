@@ -89,7 +89,10 @@ def pick_embed_models(models: list[dict]) -> list[str]:
 def chat_model() -> list[str]:
     if settings.gemini_chat_model:
         return [settings.gemini_chat_model]
-    return pick_chat_models(list_models())[:5] or ["gemini-flash-latest"]
+    found = pick_chat_models(list_models())
+    stable = [n for n in ("gemini-2.5-flash", "gemini-2.5-flash-lite") if n in found]  # 안정판: 빠르고 한도 넉넉
+    rest = [n for n in found if n not in stable]
+    return (stable + rest)[:5] or ["gemini-flash-latest"]
 
 
 def embed_model() -> str:
@@ -154,22 +157,25 @@ def complete(system: str, user: str) -> str:
         left = deadline - time.monotonic()
         if left < 8:
             break
+        t0 = time.monotonic()
         try:
             try:
                 data = _send("POST", f"models/{model}:generateContent",
-                             {**body, "generationConfig": _gen_config(model)}, timeout=min(25, left))
+                             {**body, "generationConfig": _gen_config(model)}, timeout=min(15, left))
             except HTTPException as e:
                 if e.status_code != 502 or "thinking" not in str(e.detail).lower():
                     raise
                 # 이 모델이 생각 설정을 거부하면 설정 없이 한 번 더
                 data = _send("POST", f"models/{model}:generateContent",
-                             {**body, "generationConfig": _gen_config(model, False)}, timeout=min(25, max(left - 1, 8)))
+                             {**body, "generationConfig": _gen_config(model, False)}, timeout=min(15, max(left - 1, 8)))
         except HTTPException as e:
+            print(f"[gemini] {model} 실패 {e.status_code} {time.monotonic() - t0:.1f}초", flush=True)
             if e.status_code == 429:
                 raise
             last = e  # 이 모델이 안 되면(과부하·시간 초과 포함) 다음 후보로
             _bad_until[model] = time.monotonic() + COOLDOWN
             continue
+        print(f"[gemini] {model} 성공 {time.monotonic() - t0:.1f}초", flush=True)
         _last_ok[:] = [model]
         _bad_until.pop(model, None)
         parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
